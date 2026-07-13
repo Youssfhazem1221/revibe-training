@@ -95,6 +95,8 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
   const [isPageRendering, setIsPageRendering] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playInterval, setPlayInterval] = useState(5); // Default 5 seconds
 
   const canvasRef = useRef(null);
   const renderTaskRef = useRef(null);
@@ -122,6 +124,17 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
     loadDoc();
   }, [url, isPPTX]);
 
+  // ── Slideshow Auto-Advance Effect ───────────────────────────────────────────
+  useEffect(() => {
+    let timer;
+    if (isPlaying && numPages > 0) {
+      timer = setInterval(() => {
+        setPageNum(p => (p >= numPages ? 1 : p + 1));
+      }, playInterval * 1000);
+    }
+    return () => clearInterval(timer);
+  }, [isPlaying, playInterval, numPages]);
+
   // ── Render PDF Page ─────────────────────────────────────────────────────────
   const renderPage = useCallback(async (num) => {
     const canvas = canvasRef.current;
@@ -130,7 +143,7 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
     setIsPageRendering(true);
 
     if (renderTaskRef.current) {
-      try { await renderTaskRef.current.cancel(); } catch (_) {}
+      try { await renderTaskRef.current.cancel(); } catch (_) { }
     }
 
     try {
@@ -284,6 +297,39 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
         </div>
 
         <div className="viewer-toolbar-right">
+          {/* Slideshow Auto-Play Controls */}
+          <div className="viewer-slideshow-controls" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255, 255, 255, 0.05)', padding: '2px 8px', borderRadius: '16px', marginRight: '8px' }}>
+            <button
+              className={`btn btn-ghost btn-sm ${isPlaying ? 'text-accent-pink' : ''}`}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', padding: '4px' }}
+              onClick={() => setIsPlaying(!isPlaying)}
+              title={isPlaying ? 'Pause Slideshow' : 'Start Slideshow'}
+            >
+              <i className="material-icons" style={{ fontSize: '18px' }}>{isPlaying ? 'pause' : 'play_arrow'}</i>
+            </button>
+            <select
+              value={playInterval}
+              onChange={(e) => setPlayInterval(Number(e.target.value))}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontSize: '12px',
+                fontWeight: '600',
+                outline: 'none',
+                cursor: 'pointer',
+                paddingRight: '4px',
+                WebkitAppearance: 'none',
+                MozAppearance: 'none',
+                appearance: 'none'
+              }}
+              title="Slide Duration"
+            >
+              <option value="3" style={{ background: 'var(--bg-white)', color: 'black' }}>3s</option>
+              <option value="5" style={{ background: 'var(--bg-white)', color: 'black' }}>5s</option>
+              <option value="10" style={{ background: 'var(--bg-white)', color: 'black' }}>10s</option>
+            </select>
+          </div>
           <button
             className={`btn ${presentationMode ? 'btn-primary' : 'btn-ghost'} btn-icon`}
             onClick={() => { setPresentationMode(!presentationMode); setScale(!presentationMode ? 1.5 : 1.0); }}

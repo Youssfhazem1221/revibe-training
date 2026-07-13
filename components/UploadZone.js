@@ -4,6 +4,88 @@ import { useState, useRef } from 'react';
 import { uploadMaterial } from '@/lib/materials';
 import { useAuth } from '@/contexts/AuthContext';
 
+// Helper to generate a stunning custom Revibe branded gradient thumbnail for presentations
+const generateRevibePresentationThumbnail = (fileName) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 400;
+  canvas.height = 250;
+  const ctx = canvas.getContext('2d');
+
+  // 1. Vibrant Revibe Branding Gradient
+  const gradient = ctx.createLinearGradient(0, 0, 400, 250);
+  gradient.addColorStop(0, '#FF3B3F');   // Bright Crimson Pink
+  gradient.addColorStop(0.5, '#7E30E1'); // Rich Royal Purple
+  gradient.addColorStop(1, '#4A00E0');   // Deep Blue
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 400, 250);
+
+  // 2. Translucent Modern Geometric Circles
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.beginPath();
+  ctx.arc(350, 50, 110, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+  ctx.beginPath();
+  ctx.arc(50, 200, 160, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 3. Draw Stylized "R" Revibe Logo Circle
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.beginPath();
+  ctx.arc(200, 80, 38, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 44px "Poppins", "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('R', 200, 80);
+
+  // 4. File Title Presentation Header
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 20px "Segoe UI", sans-serif';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 2;
+
+  let displayName = fileName.replace(/\.pptx$/i, '').replace(/\.pdf$/i, '');
+  if (displayName.length > 25) {
+    displayName = displayName.substring(0, 22) + '...';
+  }
+  ctx.fillText(displayName, 200, 155);
+
+  // 5. "REVIBE PRESENTATION" Pill Badge
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+
+  // Custom round-rect drawn on canvas
+  const x = 110;
+  const y = 190;
+  const width = 180;
+  const height = 28;
+  const radius = 14;
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 11px "Segoe UI", sans-serif';
+  ctx.fillText('REVIBE PRESENTATION', 200, 206);
+
+  return canvas.toDataURL('image/jpeg', 0.85);
+};
+
 export default function UploadZone({ onUploadComplete }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -102,15 +184,11 @@ export default function UploadZone({ onUploadComplete }) {
             textContent.push({ page: slide.index + 1, text: slide.text || '' });
           });
 
-          // Generate thumbnail from slide 0 (best-effort, non-blocking)
+          // Generate customized branded Revibe presentation thumbnail
           try {
-            const thumbCanvas = document.createElement('canvas');
-            await renderer.renderSlide(0, thumbCanvas, 240);
-            if (thumbCanvas.width > 0 && thumbCanvas.height > 0) {
-              thumbnailURL = thumbCanvas.toDataURL('image/jpeg', 0.7);
-            }
-          } catch (_) {
-            // Thumbnail generation failed — slide renders fine in viewer, skip thumbnail
+            thumbnailURL = generateRevibePresentationThumbnail(file.name);
+          } catch (thumbErr) {
+            console.warn('Failed to generate customized presentation thumbnail:', thumbErr);
           }
 
           renderer.destroy();
