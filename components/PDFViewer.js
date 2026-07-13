@@ -73,7 +73,17 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
         )}
         <iframe
           src={officeViewerUrl}
-          style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            display: 'block',
+            imageRendering: 'crisp-edges',
+            WebkitFontSmoothing: 'antialiased',
+            MozOsxFontSmoothing: 'grayscale',
+            transform: 'translateZ(0)',
+            backfaceVisibility: 'hidden'
+          }}
           title={title}
           onLoad={() => setIframeLoaded(true)}
           allowFullScreen
