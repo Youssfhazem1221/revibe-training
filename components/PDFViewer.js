@@ -60,32 +60,51 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
       </div>
 
       {/* Google Slides Online iframe */}
-      <div style={{ flex: 1, position: 'relative', background: '#f0f0f0' }}>
-        {!iframeLoaded && (
-          <div style={{
-            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: '16px',
-            background: 'var(--bg-white)', zIndex: 2
-          }}>
-            <i className="material-icons animate-spin text-accent-pink" style={{ fontSize: '48px' }}>refresh</i>
-            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Loading presentation via Google Slides…</p>
-          </div>
-        )}
-        <iframe
-          src={googleViewerUrl}
-          style={{
-            width: '100%',
-            height: '100%',
-            border: 'none',
-            display: 'block',
-            imageRendering: 'crisp-edges',
-            transform: 'translateZ(0)',
-            backfaceVisibility: 'hidden'
-          }}
-          title={title}
-          onLoad={() => setIframeLoaded(true)}
-          allowFullScreen
-        />
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#111827', // Premium dark presentation backdrop
+        padding: '24px',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          width: '100%',
+          maxWidth: '1100px', // Standard horizontal presentation screen width
+          aspectRatio: '16/9', // Absolute 16:9 Horizontal Slideshow ratio
+          background: 'var(--bg-white)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          position: 'relative'
+        }}>
+          {!iframeLoaded && (
+            <div style={{
+              position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: '16px',
+              background: 'var(--bg-white)', zIndex: 2
+            }}>
+              <i className="material-icons animate-spin text-accent-pink" style={{ fontSize: '48px' }}>refresh</i>
+              <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Loading presentation via Google Slides…</p>
+            </div>
+          )}
+          <iframe
+            src={googleViewerUrl}
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+              display: 'block',
+              imageRendering: 'crisp-edges',
+              transform: 'translateZ(0)',
+              backfaceVisibility: 'hidden'
+            }}
+            title={title}
+            onLoad={() => setIframeLoaded(true)}
+            allowFullScreen
+          />
+        </div>
       </div>
     </div>
   );
