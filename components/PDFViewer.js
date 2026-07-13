@@ -7,9 +7,10 @@ import * as pdfjsLib from 'pdfjs-dist';
 // We need to set the worker path to match the pdfjs-dist version
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
-// ─── PPTX Viewer via Google Docs Viewer ─────────────────────────────────────
+// ─── PPTX Viewer via PowerPoint Live Embed ──────────────────────────────────
 function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
-  const googleViewerUrl = `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(url)}`;
+  // Force a standard widescreen 16:9 horizontal aspect ratio to match our screen layout
+  const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}&wdAr=1.7777777777777777`;
   const [iframeLoaded, setIframeLoaded] = useState(false);
 
   return (
@@ -26,7 +27,7 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
         <div className="viewer-toolbar-center">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '13px' }}>
             <i className="material-icons" style={{ fontSize: '18px', color: 'var(--accent-pink)' }}>co_present</i>
-            <span>{numPages} slides • Powered by Google Docs</span>
+            <span>{numPages} slides • Powered by PowerPoint Live</span>
           </div>
         </div>
 
@@ -40,7 +41,7 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
             <i className="material-icons">download</i>
           </a>
           <a
-            href={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}`}
+            href={`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-ghost btn-icon"
@@ -59,7 +60,7 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
         </div>
       </div>
 
-      {/* Google Slides Online iframe */}
+      {/* Office Online iframe styled as centered 16:9 horizontal slideshow */}
       <div style={{
         flex: 1,
         display: 'flex',
@@ -74,7 +75,7 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
           maxWidth: '1100px', // Standard horizontal presentation screen width
           aspectRatio: '16/9', // Absolute 16:9 Horizontal Slideshow ratio
           background: 'var(--bg-white)',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6)',
           borderRadius: '8px',
           overflow: 'hidden',
           position: 'relative'
@@ -86,11 +87,11 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
               background: 'var(--bg-white)', zIndex: 2
             }}>
               <i className="material-icons animate-spin text-accent-pink" style={{ fontSize: '48px' }}>refresh</i>
-              <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Loading presentation via Google Slides…</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Loading presentation via PowerPoint Live…</p>
             </div>
           )}
           <iframe
-            src={googleViewerUrl}
+            src={officeViewerUrl}
             style={{
               width: '100%',
               height: '100%',
