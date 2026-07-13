@@ -27,23 +27,27 @@ function EditorContent() {
   useEffect(() => {
     if (!materialId || loading || !user) return;
 
+    let cancelled = false;
     const fetchMaterial = async () => {
       try {
         const docRef = doc(db, 'materials', materialId);
         const docSnap = await getDoc(docRef);
         
+        if (cancelled) return;
         if (docSnap.exists()) {
           setMaterial(docSnap.data());
         } else {
           setError('Material not found');
         }
       } catch (err) {
+        if (cancelled) return;
         console.error('Error fetching material', err);
         setError('Failed to load document details');
       }
     };
 
     fetchMaterial();
+    return () => { cancelled = true; };
   }, [materialId, user, loading]);
 
   if (loading || !user || !isTrainer) return null;

@@ -184,6 +184,16 @@ export default function PDFEditor({ url, title, materialId }) {
     return () => cancelAnimationFrame(id);
   }, [pageNum, renderPage, isPPTX]);
 
+  // ── Cleanup Fabric canvas on unmount ───────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (fabricObjRef.current) {
+        fabricObjRef.current.dispose();
+        fabricObjRef.current = null;
+      }
+    };
+  }, []);
+
   // ── Tool Selection ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!fabricObjRef.current) return;

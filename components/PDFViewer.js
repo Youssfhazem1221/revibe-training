@@ -115,7 +115,6 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
 export default function PDFViewer({ url, title, materialId, isTrainer, textContent = [], pageCount = 0 }) {
   const router = useRouter();
   const [pdfDoc, setPdfDoc] = useState(null);
-  const [pptxRenderer, setPptxRenderer] = useState(null);
   const [pageNum, setPageNum] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [scale, setScale] = useState(1.0);
@@ -153,34 +152,6 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
     loadDoc();
   }, [url, isPPTX]);
 
-  // ── Load PPTX ───────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!url || !isPPTX) return;
-
-    const loadPptx = async () => {
-      try {
-        const { PptxRenderer } = await import('pptx-browser');
-        const renderer = new PptxRenderer();
-        const response = await fetch(url);
-        const arrayBuffer = await response.arrayBuffer();
-        await renderer.load(arrayBuffer);
-        setPptxRenderer(renderer);
-        setNumPages(renderer.slideCount);
-        setPageNum(1);
-      } catch (error) {
-        console.error('Error loading PPTX:', error);
-      }
-    };
-
-    loadPptx();
-
-    return () => {
-      if (pptxRenderer) {
-        pptxRenderer.destroy();
-      }
-    };
-  }, [url, isPPTX]);
-
   // ── Slideshow Auto-Advance Effect ───────────────────────────────────────────
   useEffect(() => {
     let timer;
@@ -192,55 +163,38 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
     return () => clearInterval(timer);
   }, [isPlaying, playInterval, numPages]);
 
-  // ── Render PDF / PPTX Page ──────────────────────────────────────────────────
+  // ── Render PDF Page ──────────────────────────────────────────────────────────
   const renderPage = useCallback(async (num) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !pdfDoc) return;
 
     setIsPageRendering(true);
 
-    if (isPPTX) {
-      if (!pptxRenderer) return;
-      try {
-        const dpr = window.devicePixelRatio || 1;
-        const targetWidth = 1200 * scale * dpr; // 1:1 Vector Quality rendering baseline
-        await pptxRenderer.renderSlide(num - 1, canvas, targetWidth);
-        canvas.style.width = `${canvas.width / dpr}px`;
-        canvas.style.height = `${canvas.height / dpr}px`;
-      } catch (error) {
-        console.error('Error rendering PPTX slide:', error);
-      } finally {
-        setIsPageRendering(false);
-      }
-    } else {
-      if (!pdfDoc) return;
-
-      if (renderTaskRef.current) {
-        try { await renderTaskRef.current.cancel(); } catch (_) { }
-      }
-
-      try {
-        const page = await pdfDoc.getPage(num);
-        const ctx = canvas.getContext('2d');
-        const dpr = window.devicePixelRatio || 1;
-        const viewport = page.getViewport({ scale: scale * dpr });
-
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        canvas.style.width = `${viewport.width / dpr}px`;
-        canvas.style.height = `${viewport.height / dpr}px`;
-
-        renderTaskRef.current = page.render({ canvasContext: ctx, viewport });
-        await renderTaskRef.current.promise;
-      } catch (error) {
-        if (error.name !== 'RenderingCancelledException') {
-          console.error('Error rendering page:', error);
-        }
-      } finally {
-        setIsPageRendering(false);
-      }
+    if (renderTaskRef.current) {
+      try { await renderTaskRef.current.cancel(); } catch (_) { }
     }
-  }, [pdfDoc, pptxRenderer, scale, isPPTX]);
+
+    try {
+      const page = await pdfDoc.getPage(num);
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const viewport = page.getViewport({ scale: scale * dpr });
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.style.width = `${viewport.width / dpr}px`;
+      canvas.style.height = `${viewport.height / dpr}px`;
+
+      renderTaskRef.current = page.render({ canvasContext: ctx, viewport });
+      await renderTaskRef.current.promise;
+    } catch (error) {
+      if (error.name !== 'RenderingCancelledException') {
+        console.error('Error rendering page:', error);
+      }
+    } finally {
+      setIsPageRendering(false);
+    }
+  }, [pdfDoc, scale]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => renderPage(pageNum));
@@ -460,7 +414,7 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
 
         {/* Canvas */}
         <div className="viewer-main">
-          {(pdfDoc || pptxRenderer) ? (
+          {pdfDoc ? (
             <div className="viewer-page-wrapper" style={{ position: 'relative' }}>
               {isPageRendering && (
                 <div style={{

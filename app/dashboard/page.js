@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAllMaterials, deleteMaterial } from '@/lib/materials';
@@ -33,7 +33,7 @@ export default function Dashboard() {
     return filtered;
   }, [materials, activeCategory, searchQuery]);
 
-  const loadMaterials = async () => {
+  const loadMaterials = useCallback(async () => {
     setIsLoadingMaterials(true);
     try {
       const data = await getAllMaterials();
@@ -47,7 +47,7 @@ export default function Dashboard() {
       console.error("Failed to load materials", error);
     }
     setIsLoadingMaterials(false);
-  };
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -62,7 +62,7 @@ export default function Dashboard() {
       });
       return () => cancelAnimationFrame(id);
     }
-  }, [user]);
+  }, [user, loadMaterials]);
 
   const handleDelete = async (id, storagePath) => {
     if (confirm('Are you sure you want to delete this material?')) {
