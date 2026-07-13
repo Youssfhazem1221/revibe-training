@@ -7,9 +7,9 @@ import * as pdfjsLib from 'pdfjs-dist';
 // We need to set the worker path to match the pdfjs-dist version
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
-// ─── PPTX Viewer via Microsoft Office Online ────────────────────────────────
+// ─── PPTX Viewer via Google Docs Viewer ─────────────────────────────────────
 function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
-  const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+  const googleViewerUrl = `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(url)}`;
   const [iframeLoaded, setIframeLoaded] = useState(false);
 
   return (
@@ -26,7 +26,7 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
         <div className="viewer-toolbar-center">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '13px' }}>
             <i className="material-icons" style={{ fontSize: '18px', color: 'var(--accent-pink)' }}>co_present</i>
-            <span>{numPages} slides • Powered by Microsoft Office</span>
+            <span>{numPages} slides • Powered by Google Docs</span>
           </div>
         </div>
 
@@ -40,7 +40,7 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
             <i className="material-icons">download</i>
           </a>
           <a
-            href={`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`}
+            href={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-ghost btn-icon"
@@ -59,7 +59,7 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
         </div>
       </div>
 
-      {/* Office Online iframe */}
+      {/* Google Slides Online iframe */}
       <div style={{ flex: 1, position: 'relative', background: '#f0f0f0' }}>
         {!iframeLoaded && (
           <div style={{
@@ -68,19 +68,17 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
             background: 'var(--bg-white)', zIndex: 2
           }}>
             <i className="material-icons animate-spin text-accent-pink" style={{ fontSize: '48px' }}>refresh</i>
-            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Loading presentation via Microsoft Office…</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Loading presentation via Google Slides…</p>
           </div>
         )}
         <iframe
-          src={officeViewerUrl}
+          src={googleViewerUrl}
           style={{
             width: '100%',
             height: '100%',
             border: 'none',
             display: 'block',
             imageRendering: 'crisp-edges',
-            WebkitFontSmoothing: 'antialiased',
-            MozOsxFontSmoothing: 'grayscale',
             transform: 'translateZ(0)',
             backfaceVisibility: 'hidden'
           }}
@@ -290,7 +288,23 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
     else pageInputRef.current.value = pageNum;
   };
 
-  // ── PDF/PPTX Viewer ────────────────────────────────────────────────────────
+  // ── PPTX → Google Docs Viewer ──────────────────────────────────────────────
+  if (isPPTX) {
+    return (
+      <div className={`viewer-page ${presentationMode ? 'presentation-mode' : ''}`} style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        <PPTXViewer
+          url={url}
+          title={title}
+          numPages={pageCount}
+          materialId={materialId}
+          isTrainer={isTrainer}
+          router={router}
+        />
+      </div>
+    );
+  }
+
+  // ── PDF Viewer ──────────────────────────────────────────────────────────────
   return (
     <div className={`viewer-page ${presentationMode ? 'presentation-mode' : ''}`}>
       {/* Toolbar */}
