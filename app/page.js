@@ -66,10 +66,9 @@ export default function LoginPage() {
       <div className="login-container">
         <div className="login-card">
           <div className="login-brand">
-            <div className="login-logo gradient-text">REVIBE</div>
+            <div className="login-logo gradient-text font-bold" style={{ fontWeight: '800' }}>REVIBE</div>
             <div className="login-subtitle font-poppins text-muted text-h3 font-medium">Training Hub</div>
           </div>
-          <p className="login-tagline text-small text-muted italic mb-8">&ldquo;Like new, but waaaay better at learning&rdquo; 🚀</p>
 
           <div className="login-form">
             <button onClick={handleLogin} className="login-btn">
@@ -86,9 +85,6 @@ export default function LoginPage() {
             {error && <div className="login-error visible">{error}</div>}
           </div>
 
-          <div className="login-footer mt-8 text-small text-muted">
-            Powered by <a href="https://revibe.me" target="_blank" rel="noopener noreferrer" className="text-accent-purple font-semibold hover:text-accent-pink transition-colors">REVIBE</a>
-          </div>
         </div>
       </div>
     </div>
