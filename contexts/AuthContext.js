@@ -4,6 +4,8 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import {
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut as firebaseSignOut
 } from 'firebase/auth';
@@ -20,6 +22,10 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Handle redirect result on page load for users who fall back to redirect auth
+    getRedirectResult(auth).catch((error) => {
+      console.error("Error handling redirect result:", error);
+    });
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -73,6 +79,17 @@ export function AuthProvider({ children }) {
     try {
       await signInWithPopup(auth, provider);
     } catch (error) {
+      // Automatic fallback to Redirect if Popup is blocked by the user's browser / adblocker
+      if (error.code === 'auth/popup-blocked' || error.message?.includes('popup')) {
+        console.warn("Popup blocked, falling back to signInWithRedirect...");
+        try {
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectErr) {
+          console.error("Error signing in with Google Redirect", redirectErr);
+          throw redirectErr;
+        }
+      }
       console.error("Error signing in with Google", error);
       throw error;
     }
