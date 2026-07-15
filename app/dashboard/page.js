@@ -4,8 +4,10 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAllMaterials, deleteMaterial } from '@/lib/materials';
+import { getUserProgress } from '@/lib/progress';
 import Navbar from '@/components/Navbar';
 import UploadZone from '@/components/UploadZone';
+import ProgressBar from '@/components/ProgressBar';
 import './dashboard.css';
 
 export default function Dashboard() {
@@ -17,6 +19,7 @@ export default function Dashboard() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingMaterials, setIsLoadingMaterials] = useState(true);
+  const [userProgressMap, setUserProgressMap] = useState({});
 
   const filteredMaterials = useMemo(() => {
     let filtered = materials;
@@ -63,6 +66,28 @@ export default function Dashboard() {
       return () => cancelAnimationFrame(id);
     }
   }, [user, loadMaterials]);
+
+  // Load user progress data
+  useEffect(() => {
+    if (user) {
+      getUserProgress(user.uid)
+        .then(progressList => {
+          const progressMap = {};
+          progressList.forEach(progress => {
+            progressMap[progress.materialId] = {
+              viewedPages: progress.viewedPages?.length || 0,
+              totalPages: progress.totalPages || 0,
+              completionPercentage: progress.completionPercentage || 0,
+              completed: progress.completed || false
+            };
+          });
+          setUserProgressMap(progressMap);
+        })
+        .catch(error => {
+          console.error('Error loading user progress:', error);
+        });
+    }
+  }, [user]);
 
   const handleDelete = async (id, storagePath) => {
     if (confirm('Are you sure you want to delete this material?')) {
@@ -181,6 +206,18 @@ export default function Dashboard() {
                       <span>{new Date(material.uploadedAt).toLocaleDateString()}</span>
                     </div>
                   </div>
+                  
+                  {/* Progress Bar */}
+                  {userProgressMap[material.id] && (
+                    <div className="material-progress" style={{ marginTop: '12px', marginBottom: '8px' }}>
+                      <ProgressBar
+                        viewedPages={userProgressMap[material.id].viewedPages}
+                        totalPages={userProgressMap[material.id].totalPages}
+                        size="sm"
+                        showLabel={true}
+                      />
+                    </div>
+                  )}
                   
                   <div className="material-actions mt-auto">
                     <button 

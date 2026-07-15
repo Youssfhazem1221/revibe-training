@@ -2,6 +2,10 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { recordPageView, isMaterialCompleted } from '@/lib/progress';
+import { getUserMaterialFeedback } from '@/lib/feedback';
+import FeedbackModal from './FeedbackModal';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // We need to set the worker path to match the pdfjs-dist version
@@ -114,6 +118,7 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
 // ─── Main PDFViewer ──────────────────────────────────────────────────────────
 export default function PDFViewer({ url, title, materialId, isTrainer, textContent = [], pageCount = 0 }) {
   const router = useRouter();
+  const { user } = useAuth();
   const [pdfDoc, setPdfDoc] = useState(null);
   const [pageNum, setPageNum] = useState(1);
   const [numPages, setNumPages] = useState(0);
@@ -125,11 +130,14 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playInterval, setPlayInterval] = useState(5); // Default 5 seconds
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [hasShownFeedbackModal, setHasShownFeedbackModal] = useState(false);
 
   const canvasRef = useRef(null);
   const renderTaskRef = useRef(null);
   const pageInputRef = useRef(null);
   const searchInputRef = useRef(null);
+  const progressTimerRef = useRef(null);
 
   const isPPTX = url?.toLowerCase().includes('.pptx');
 
@@ -200,6 +208,48 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
     const id = requestAnimationFrame(() => renderPage(pageNum));
     return () => cancelAnimationFrame(id);
   }, [pageNum, renderPage]);
+
+  // ── Track Progress (Debounced) ──────────────────────────────────────────────
+  useEffect(() => {
+    // Only track progress for authenticated users with valid material data
+    if (!user || !materialId || !numPages || numPages === 0) return;
+
+    // Clear any existing timer
+    if (progressTimerRef.current) {
+      clearTimeout(progressTimerRef.current);
+    }
+
+    // Debounce progress tracking by 2 seconds to avoid excessive Firestore writes
+    progressTimerRef.current = setTimeout(async () => {
+      try {
+        await recordPageView(user.uid, materialId, pageNum, numPages, title || 'Untitled');
+        
+        // Check if user just completed the material (haven't shown modal yet this session)
+        if (!hasShownFeedbackModal) {
+          const completed = await isMaterialCompleted(user.uid, materialId);
+          if (completed) {
+            // Check if user has already submitted feedback
+            const existingFeedback = await getUserMaterialFeedback(user.uid, materialId);
+            // Only show modal if no feedback exists yet
+            if (!existingFeedback) {
+              setShowFeedbackModal(true);
+              setHasShownFeedbackModal(true);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to record page view:', error);
+        // Silent fail - don't interrupt user experience
+      }
+    }, 2000);
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (progressTimerRef.current) {
+        clearTimeout(progressTimerRef.current);
+      }
+    };
+  }, [user, materialId, pageNum, numPages, title, hasShownFeedbackModal]);
 
   // ── Search ──────────────────────────────────────────────────────────────────
   const searchMatches = useMemo(() => {
@@ -280,9 +330,10 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
 
   // ── PDF Viewer ──────────────────────────────────────────────────────────────
   return (
-    <div className={`viewer-page ${presentationMode ? 'presentation-mode' : ''}`}>
-      {/* Toolbar */}
-      <div className="viewer-toolbar">
+    <>
+      <div className={`viewer-page ${presentationMode ? 'presentation-mode' : ''}`}>
+        {/* Toolbar */}
+        <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
           <button className="viewer-back-btn" onClick={() => router.push('/dashboard')}>
             <i className="material-icons">arrow_back</i> Back
@@ -435,6 +486,18 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
           )}
         </div>
       </div>
-    </div>
+      </div>
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        materialId={materialId}
+        materialName={title || 'Untitled'}
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        onSubmitSuccess={() => {
+          console.log('Feedback submitted successfully');
+        }}
+      />
+    </>
   );
 }
