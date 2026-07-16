@@ -65,26 +65,39 @@ export default function LoginPage() {
 
       <div className="login-container">
         <div className="login-card">
+          <div className="login-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L3 7v6c0 5.25 3.75 9.75 9 11 5.25-1.25 9-5.75 9-11V7l-9-5z" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
+              <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+
           <div className="login-brand">
-            <div className="login-logo gradient-text font-bold" style={{ fontWeight: '800' }}>REVIBE</div>
-            <div className="login-subtitle font-poppins text-muted text-h3 font-medium">Training Hub</div>
+            <div className="login-eyebrow">REVIBE</div>
+            <h1 className="login-title">Training Hub</h1>
+            <p className="login-tagline">
+              Sign in to continue learning, track your progress, and earn badges as you go.
+            </p>
           </div>
 
           <div className="login-form">
-            <button onClick={handleLogin} className="login-btn">
+            <button onClick={handleLogin} className="login-btn" aria-label="Sign in with Google">
               <span className="btn-text">
-                <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-                  <path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                  <path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.28-.98 2.36-2.09 3.09l3.38 2.62c1.97-1.82 3.11-4.5 3.11-7.71 0-.75-.07-1.47-.2-2.16H12z" />
+                  <path fill="#34A853" d="M6.53 14.29l-.76.58-2.7 2.1C4.79 20.4 8.11 22.5 12 22.5c2.7 0 4.96-.89 6.62-2.42l-3.38-2.62c-.89.6-2.03.96-3.24.96-2.5 0-4.62-1.68-5.38-3.94l-.09-.19z" />
+                  <path fill="#FBBC05" d="M3.07 7.03C2.39 8.38 2 9.9 2 11.5s.39 3.12 1.07 4.47c0 .01 3.46-2.69 3.46-2.69-.2-.6-.32-1.24-.32-1.9s.12-1.3.32-1.9L3.07 7.03z" />
+                  <path fill="#4285F4" d="M12 5.98c1.47 0 2.79.51 3.83 1.5l2.87-2.87C16.95 3.09 14.7 2.5 12 2.5c-3.89 0-7.21 2.1-9.03 5.03l3.46 2.69C7.38 7.66 9.5 5.98 12 5.98z" />
                 </svg>
-                Sign in with Google
+                Continue with Google
               </span>
             </button>
-            {error && <div className="login-error visible">{error}</div>}
+            {error && <div className="login-error visible" role="alert">{error}</div>}
           </div>
 
+          <div className="login-footer">
+            Secure sign-in · Powered by Google
+          </div>
         </div>
       </div>
     </div>
