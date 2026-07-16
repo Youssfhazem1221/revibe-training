@@ -13,9 +13,10 @@ service cloud.firestore {
     }
     
     function isTrainer() {
-      return isSignedIn() && 
-             (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'trainer' ||
-              request.auth.token.email == 'youssf.rehem@revibe.me');
+      return isSignedIn() &&
+             (request.auth.token.email == 'youssf.rehem@revibe.me' ||
+              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'trainer'));
     }
     
     function isTrainerOrOwner(uid) {
@@ -80,10 +81,11 @@ service cloud.firestore {
                        request.resource.data.uid == request.auth.uid &&
                        progressId == request.auth.uid + '_' + request.resource.data.materialId;
       
-      allow update: if isSignedIn() && 
+      allow update: if isSignedIn() &&
                        resource.data.uid == request.auth.uid &&
-                       request.resource.data.uid == request.auth.uid;
-      
+                       request.resource.data.uid == request.auth.uid &&
+                       progressId == request.auth.uid + '_' + request.resource.data.materialId;
+
       // Only trainers can delete progress records
       allow delete: if isTrainer();
     }
@@ -97,13 +99,22 @@ service cloud.firestore {
       
       // Users can create/update their own feedback
       // Document ID must match pattern: {uid}_{materialId}
-      allow create: if isSignedIn() && 
+      allow create: if isSignedIn() &&
                        request.resource.data.uid == request.auth.uid &&
-                       feedbackId == request.auth.uid + '_' + request.resource.data.materialId;
-      
-      allow update: if isSignedIn() && 
+                       feedbackId == request.auth.uid + '_' + request.resource.data.materialId &&
+                       request.resource.data.rating is int &&
+                       request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
+                       (!('comment' in request.resource.data) ||
+                        request.resource.data.comment.size() <= 500);
+
+      allow update: if isSignedIn() &&
                        resource.data.uid == request.auth.uid &&
-                       request.resource.data.uid == request.auth.uid;
+                       request.resource.data.uid == request.auth.uid &&
+                       feedbackId == request.auth.uid + '_' + request.resource.data.materialId &&
+                       request.resource.data.rating is int &&
+                       request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
+                       (!('comment' in request.resource.data) ||
+                        request.resource.data.comment.size() <= 500);
       
       // Only trainers can delete feedback
       allow delete: if isTrainer();

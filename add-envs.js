@@ -1,4 +1,4 @@
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -26,11 +26,14 @@ console.log(`Parsed ${vars.length} environment variables.`);
 
 const targets = ['production', 'preview', 'development'];
 
-function runCommand(cmd) {
+function runVercel(args, stdinValue) {
   return new Promise((resolve) => {
-    const child = exec(cmd, { timeout: 6000 }, (error, stdout, stderr) => {
-      resolve();
-    });
+    const child = execFile('vercel', args, { timeout: 6000 }, () => resolve());
+    // Vercel prompts for the value on stdin when --value is omitted, which
+    // avoids passing the secret through a shell-interpolated argv string.
+    if (stdinValue !== undefined && child.stdin) {
+      child.stdin.end(stdinValue);
+    }
   });
 }
 
@@ -39,8 +42,9 @@ async function main() {
   for (const v of vars) {
     for (const target of targets) {
       console.log(`Queuing ${v.name} for ${target}...`);
-      const cmd = `vercel env add ${v.name} ${target} --value "${v.value}" --yes --force`;
-      promises.push(runCommand(cmd));
+      // Pass args as an array (no shell interpolation) and stream the value
+      // on stdin so secrets containing quotes, $, or ` are safe.
+      promises.push(runVercel(['env', 'add', v.name, target, '--yes', '--force'], v.value));
     }
   }
   

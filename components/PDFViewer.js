@@ -138,6 +138,7 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
   const pageInputRef = useRef(null);
   const searchInputRef = useRef(null);
   const progressTimerRef = useRef(null);
+  const recordedPagesRef = useRef(new Set());
 
   const isPPTX = url?.toLowerCase().includes('.pptx');
 
@@ -209,45 +210,43 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
     return () => cancelAnimationFrame(id);
   }, [pageNum, renderPage]);
 
-  // ── Track Progress (Debounced) ──────────────────────────────────────────────
+  // ── Track Progress ──────────────────────────────────────────────────────────
+  // Record every unique page immediately (deduped by a per-session ref), so fast
+  // paging or slideshow autoplay doesn't drop intermediate pages. The completion
+  // check + feedback modal remain debounced to avoid extra reads on each hop.
   useEffect(() => {
-    // Only track progress for authenticated users with valid material data
     if (!user || !materialId || !numPages || numPages === 0) return;
 
-    // Clear any existing timer
-    if (progressTimerRef.current) {
-      clearTimeout(progressTimerRef.current);
+    const cacheKey = `${user.uid}:${materialId}:${pageNum}`;
+    if (!recordedPagesRef.current.has(cacheKey)) {
+      recordedPagesRef.current.add(cacheKey);
+      recordPageView(user.uid, materialId, pageNum, numPages, title || 'Untitled')
+        .catch((err) => {
+          // On failure, allow a retry next visit to the same page.
+          recordedPagesRef.current.delete(cacheKey);
+          console.warn('Failed to record page view:', err);
+        });
     }
 
-    // Debounce progress tracking by 2 seconds to avoid excessive Firestore writes
+    if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
+
     progressTimerRef.current = setTimeout(async () => {
+      if (hasShownFeedbackModal) return;
       try {
-        await recordPageView(user.uid, materialId, pageNum, numPages, title || 'Untitled');
-        
-        // Check if user just completed the material (haven't shown modal yet this session)
-        if (!hasShownFeedbackModal) {
-          const completed = await isMaterialCompleted(user.uid, materialId);
-          if (completed) {
-            // Check if user has already submitted feedback
-            const existingFeedback = await getUserMaterialFeedback(user.uid, materialId);
-            // Only show modal if no feedback exists yet
-            if (!existingFeedback) {
-              setShowFeedbackModal(true);
-              setHasShownFeedbackModal(true);
-            }
-          }
+        const completed = await isMaterialCompleted(user.uid, materialId);
+        if (!completed) return;
+        const existingFeedback = await getUserMaterialFeedback(user.uid, materialId);
+        if (!existingFeedback) {
+          setShowFeedbackModal(true);
+          setHasShownFeedbackModal(true);
         }
       } catch (error) {
-        console.warn('Failed to record page view:', error);
-        // Silent fail - don't interrupt user experience
+        console.warn('Failed to check completion:', error);
       }
     }, 2000);
 
-    // Cleanup on unmount or when dependencies change
     return () => {
-      if (progressTimerRef.current) {
-        clearTimeout(progressTimerRef.current);
-      }
+      if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
     };
   }, [user, materialId, pageNum, numPages, title, hasShownFeedbackModal]);
 
@@ -256,7 +255,7 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
     if (searchQuery.trim() === '' || !textContent) return [];
     const q = searchQuery.toLowerCase();
     return textContent
-      .filter(p => p.text.toLowerCase().includes(q))
+      .filter(p => (p.text || '').toLowerCase().includes(q))
       .map(p => p.page);
   }, [searchQuery, textContent]);
 

@@ -41,7 +41,7 @@ export function AuthProvider({ children }) {
           const userDoc = await getDoc(userRef);
 
           if (userDoc.exists()) {
-            if (firebaseUser.email.toLowerCase() === ADMIN_EMAIL && userDoc.data().role !== 'trainer') {
+            if (firebaseUser.email?.toLowerCase() === ADMIN_EMAIL && userDoc.data().role !== 'trainer') {
               await setDoc(userRef, { role: 'trainer', lastLogin: new Date().toISOString() }, { merge: true });
             } else {
               currentRole = userDoc.data().role || currentRole;

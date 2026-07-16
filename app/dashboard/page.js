@@ -30,7 +30,7 @@ export default function Dashboard() {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(m => 
         m.name.toLowerCase().includes(q) || 
-        (m.textContent && m.textContent.some(page => page.text.toLowerCase().includes(q)))
+        (m.textContent && m.textContent.some(page => (page.text || '').toLowerCase().includes(q)))
       );
     }
     return filtered;
