@@ -73,55 +73,144 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 440px;
+  max-width: 480px;
   padding: var(--space-6);
   animation: fadeInUp 0.6s ease-out;
 }
 
 .login-card {
   background: var(--bg-white);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 40px rgba(255, 46, 99, 0.1);
-  padding: var(--space-10) var(--space-8);
+  border-radius: 24px;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.18),
+    0 0 60px rgba(255, 46, 99, 0.08);
+  padding: 56px 48px 40px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 44px 28px 32px;
+    gap: 28px;
+    border-radius: 20px;
+  }
+}
+
+/* Shield badge above the brand */
+.login-badge {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ff2e63 0%, #ff6b9d 100%);
+  color: #fff;
+  box-shadow:
+    0 12px 30px rgba(255, 46, 99, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* Brand block */
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.login-eyebrow {
+  font-family: var(--font-poppins);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--accent-pink, #ff2e63);
+  text-transform: uppercase;
+}
+
+.login-title {
+  font-family: var(--font-poppins);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary, #111);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.login-tagline {
+  font-family: var(--font-poppins);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-muted, #6b7280);
+  margin: 4px 0 0;
+  max-width: 320px;
+}
+
+.login-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .login-btn {
   width: 100%;
-  padding: var(--space-4) var(--space-6);
+  padding: 14px 20px;
   font-family: var(--font-poppins);
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-white);
-  background: #1a1a1a;
-  border: none;
-  border-radius: var(--radius-lg);
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f1f1f;
+  background: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all var(--transition-base);
-  position: relative;
-  overflow: hidden;
+  transition: all 0.18s ease;
   display: flex;
   justify-content: center;
   align-items: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .login-btn:hover {
-  background: #000;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  border-color: #d1d5db;
+  background: #fafafa;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+.login-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.login-btn:focus-visible {
+  outline: 2px solid var(--accent-pink, #ff2e63);
+  outline-offset: 2px;
 }
 
 .login-btn .btn-text {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 12px;
 }
 
 .login-error {
-  font-size: var(--text-small);
-  color: var(--color-danger);
-  background: var(--color-danger-light);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  margin-top: var(--space-4);
+  font-size: 13px;
+  color: var(--color-danger, #dc2626);
+  background: var(--color-danger-light, #fef2f2);
+  padding: 10px 14px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.login-footer {
+  font-family: var(--font-poppins);
+  font-size: 12px;
+  color: var(--text-muted, #9ca3af);
+  letter-spacing: 0.02em;
 }
