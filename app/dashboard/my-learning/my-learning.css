@@ -182,40 +182,100 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 80px 24px;
+  padding: 72px 32px;
   text-align: center;
   background: white;
-  border-radius: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(17, 24, 39, 0.05);
+  box-shadow: 0 1px 3px rgba(17, 24, 39, 0.02);
 }
 
-.learning-loading i,
-.learning-empty i {
-  font-size: 72px;
+.learning-loading i {
+  font-size: 56px;
+  color: var(--accent-pink, #ff2e63);
   margin-bottom: 16px;
 }
 
-.learning-empty i {
-  color: var(--accent-pink);
+/* Circular icon frame — replaces the huge floating icon */
+.learning-empty-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 46, 99, 0.10) 0%, rgba(124, 58, 237, 0.10) 100%);
+  color: var(--accent-pink, #ff2e63);
+  margin-bottom: 20px;
+}
+
+.learning-empty-icon i {
+  font-size: 34px;
 }
 
 .learning-empty h3 {
+  font-family: var(--font-poppins), sans-serif;
   font-size: 20px;
   font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 8px;
+  color: var(--text-primary, #111827);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
 }
 
 .learning-empty p {
+  font-family: var(--font-poppins), sans-serif;
   font-size: 14px;
-  color: var(--text-muted);
+  line-height: 1.55;
+  color: var(--text-muted, #6b7280);
   margin-bottom: 24px;
-  max-width: 400px;
+  max-width: 380px;
 }
 
-.learning-empty .btn {
-  display: flex;
+/* Redesigned CTA — compact pill, dark base, subtle gradient sheen on hover */
+.learning-empty-cta {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding: 10px 18px 10px 14px;
+  border-radius: 999px;
+  background: #111827;
+  color: #ffffff;
+  font-family: var(--font-poppins), sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(17, 24, 39, 0.12);
+}
+
+.learning-empty-cta:hover {
+  background: linear-gradient(135deg, #ff2e63 0%, #7c3aed 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(255, 46, 99, 0.28);
+}
+
+.learning-empty-cta:active {
+  transform: translateY(0);
+}
+
+.learning-empty-cta:focus-visible {
+  outline: 2px solid var(--accent-pink, #ff2e63);
+  outline-offset: 3px;
+}
+
+.learning-empty-cta i {
+  font-size: 18px;
+}
+
+.learning-empty-cta-arrow {
+  transition: transform 0.2s ease;
+  opacity: 0.85;
+}
+
+.learning-empty-cta:hover .learning-empty-cta-arrow {
+  transform: translateX(3px);
+  opacity: 1;
 }
 
 /* Materials List */
