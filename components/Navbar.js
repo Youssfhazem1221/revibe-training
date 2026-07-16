@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
+import { APP_VERSION } from '@/lib/version';
 
 export default function Navbar({ title = 'Dashboard' }) {
   const { user, role, isTrainer, signOut } = useAuth();
@@ -56,7 +57,10 @@ export default function Navbar({ title = 'Dashboard' }) {
   return (
     <nav className="navbar">
       <div className="navbar-brand">
-        <div className="navbar-logo gradient-text">REVIBE</div>
+        <div className="navbar-logo-group">
+          <div className="navbar-logo gradient-text">REVIBE</div>
+          <span className="navbar-version" title={`App version ${APP_VERSION}`}>v{APP_VERSION}</span>
+        </div>
         <div className="navbar-divider"></div>
         <div className="navbar-page-title">{title}</div>
       </div>
@@ -77,18 +81,19 @@ export default function Navbar({ title = 'Dashboard' }) {
       </div>
       
       <div className="navbar-actions">
-        {role && (
-          <div className={`badge ${isTrainer ? 'badge-pink' : 'badge-purple'}`}>
-            {isTrainer ? 'TRAINER' : 'TRAINEE'}
-          </div>
-        )}
-        
         <div className="navbar-user">
           <div className="navbar-avatar">{initials}</div>
-          <div className="navbar-email">{displayName}</div>
+          <div className="navbar-user-meta">
+            <div className="navbar-email">{displayName}</div>
+            {role && (
+              <span className={`navbar-role-tag ${isTrainer ? 'is-trainer' : 'is-trainee'}`}>
+                {isTrainer ? 'Trainer' : 'Trainee'}
+              </span>
+            )}
+          </div>
         </div>
-        
-        <button onClick={handleSignOut} className="btn btn-ghost btn-sm" title="Sign Out">
+
+        <button onClick={handleSignOut} className="navbar-signout" title="Sign out" aria-label="Sign out">
           <i className="material-icons">logout</i>
         </button>
       </div>

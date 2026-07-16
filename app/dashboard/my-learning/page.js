@@ -216,23 +216,26 @@ export default function MyLearningPage() {
           <BadgesDisplay badges={badges} showProgress={true} />
         ) : filteredProgress.length === 0 ? (
           <div className="learning-empty">
-            <i className="material-icons">school</i>
+            <div className="learning-empty-icon" aria-hidden="true">
+              <i className="material-icons">school</i>
+            </div>
             <h3>
               {activeTab === 'completed' && 'No completed materials yet'}
               {activeTab === 'in-progress' && 'No materials in progress'}
               {activeTab === 'all' && 'Start your learning journey'}
             </h3>
             <p>
-              {activeTab === 'completed' && 'Keep learning to earn your first completion!'}
-              {activeTab === 'in-progress' && 'Browse the dashboard to start a new material'}
-              {activeTab === 'all' && 'Browse available training materials on the dashboard'}
+              {activeTab === 'completed' && 'Keep learning to earn your first completion.'}
+              {activeTab === 'in-progress' && 'Head to the dashboard to pick up a new material.'}
+              {activeTab === 'all' && 'Browse available training materials on the dashboard.'}
             </p>
             <button
-              className="btn btn-gradient"
+              className="learning-empty-cta"
               onClick={() => router.push('/dashboard')}
             >
               <i className="material-icons">explore</i>
-              Browse Materials
+              <span>Browse materials</span>
+              <i className="material-icons learning-empty-cta-arrow">arrow_forward</i>
             </button>
           </div>
         ) : (
