@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { recordPageView, isMaterialCompleted } from '@/lib/progress';
+import { recordPageView } from '@/lib/progress';
 import { getUserMaterialFeedback } from '@/lib/feedback';
 import FeedbackModal from './FeedbackModal';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -132,12 +132,12 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
   const [playInterval, setPlayInterval] = useState(5); // Default 5 seconds
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [hasShownFeedbackModal, setHasShownFeedbackModal] = useState(false);
+  const [endBannerDismissed, setEndBannerDismissed] = useState(false);
 
   const canvasRef = useRef(null);
   const renderTaskRef = useRef(null);
   const pageInputRef = useRef(null);
   const searchInputRef = useRef(null);
-  const progressTimerRef = useRef(null);
   const recordedPagesRef = useRef(new Set());
 
   const isPPTX = url?.toLowerCase().includes('.pptx');
@@ -212,43 +212,42 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
 
   // ── Track Progress ──────────────────────────────────────────────────────────
   // Record every unique page immediately (deduped by a per-session ref), so fast
-  // paging or slideshow autoplay doesn't drop intermediate pages. The completion
-  // check + feedback modal remain debounced to avoid extra reads on each hop.
+  // paging or slideshow autoplay doesn't drop intermediate pages.
   useEffect(() => {
     if (!user || !materialId || !numPages || numPages === 0) return;
 
     const cacheKey = `${user.uid}:${materialId}:${pageNum}`;
-    if (!recordedPagesRef.current.has(cacheKey)) {
-      recordedPagesRef.current.add(cacheKey);
-      recordPageView(user.uid, materialId, pageNum, numPages, title || 'Untitled')
-        .catch((err) => {
-          // On failure, allow a retry next visit to the same page.
-          recordedPagesRef.current.delete(cacheKey);
-          console.warn('Failed to record page view:', err);
-        });
-    }
+    if (recordedPagesRef.current.has(cacheKey)) return;
 
-    if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
+    recordedPagesRef.current.add(cacheKey);
+    recordPageView(user.uid, materialId, pageNum, numPages, title || 'Untitled')
+      .catch((err) => {
+        // On failure, allow a retry next visit to the same page.
+        recordedPagesRef.current.delete(cacheKey);
+        console.warn('Failed to record page view:', err);
+      });
+  }, [user, materialId, pageNum, numPages, title]);
 
-    progressTimerRef.current = setTimeout(async () => {
-      if (hasShownFeedbackModal) return;
-      try {
-        const completed = await isMaterialCompleted(user.uid, materialId);
-        if (!completed) return;
-        const existingFeedback = await getUserMaterialFeedback(user.uid, materialId);
-        if (!existingFeedback) {
-          setShowFeedbackModal(true);
-          setHasShownFeedbackModal(true);
-        }
-      } catch (error) {
-        console.warn('Failed to check completion:', error);
-      }
-    }, 2000);
+  // Reliable, client-side end-of-deck detection (no Firestore round-trip).
+  const isLastPage = numPages > 0 && pageNum >= numPages;
 
-    return () => {
-      if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
-    };
-  }, [user, materialId, pageNum, numPages, title, hasShownFeedbackModal]);
+  // Auto-open the feedback modal once when a trainee reaches the final slide.
+  // Not gated on "every page viewed" or a debounce, so it fires dependably
+  // however the trainee navigated to the end.
+  useEffect(() => {
+    if (!isLastPage || isTrainer || hasShownFeedbackModal || !user || !materialId) return;
+
+    let cancelled = false;
+    getUserMaterialFeedback(user.uid, materialId)
+      .then((existing) => {
+        if (cancelled || existing) return;
+        setShowFeedbackModal(true);
+        setHasShownFeedbackModal(true);
+      })
+      .catch(() => { /* non-blocking */ });
+
+    return () => { cancelled = true; };
+  }, [isLastPage, isTrainer, hasShownFeedbackModal, user, materialId]);
 
   // ── Search ──────────────────────────────────────────────────────────────────
   const searchMatches = useMemo(() => {
@@ -421,6 +420,13 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
           >
             <i className="material-icons">search</i>
           </button>
+          <button
+            className="btn btn-ghost btn-icon"
+            onClick={() => setShowFeedbackModal(true)}
+            title={isTrainer ? 'Preview feedback form' : 'Rate / give feedback'}
+          >
+            <i className="material-icons">rate_review</i>
+          </button>
           {isTrainer && (
             <button
               className="btn btn-outline-pink btn-sm"
@@ -476,6 +482,38 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
                 </div>
               )}
               <canvas ref={canvasRef} />
+
+              {isLastPage && !endBannerDismissed && (
+                <div className="viewer-end-banner" role="status">
+                  <div className="viewer-end-banner-icon">
+                    <i className="material-icons">check_circle</i>
+                  </div>
+                  <div className="viewer-end-banner-text">
+                    <strong>You&apos;ve reached the end</strong>
+                    <span>
+                      {isTrainer
+                        ? 'This is how trainees finish the material.'
+                        : `Nice work finishing "${title || 'this material'}".`}
+                    </span>
+                  </div>
+                  <div className="viewer-end-banner-actions">
+                    <button className="viewer-end-btn primary" onClick={() => setShowFeedbackModal(true)}>
+                      <i className="material-icons">rate_review</i>
+                      {isTrainer ? 'Preview feedback' : 'Rate this material'}
+                    </button>
+                    <button className="viewer-end-btn" onClick={() => router.push('/dashboard')}>
+                      Back to dashboard
+                    </button>
+                  </div>
+                  <button
+                    className="viewer-end-banner-close"
+                    onClick={() => setEndBannerDismissed(true)}
+                    aria-label="Dismiss"
+                  >
+                    <i className="material-icons">close</i>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-muted" style={{ margin: 'auto' }}>
