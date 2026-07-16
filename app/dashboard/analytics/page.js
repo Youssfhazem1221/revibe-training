@@ -366,12 +366,13 @@ export default function AnalyticsPage() {
                 <div className="analytics-card-header">
                   <h2 className="analytics-card-title">
                     <i className="material-icons">chat</i>
-                    Recent Feedback
+                    Trainee Feedback
+                    <span className="analytics-card-count">{feedbackStats.recentFeedback.length}</span>
                   </h2>
                 </div>
                 <div className="analytics-card-body">
                   <div className="feedback-list">
-                    {feedbackStats.recentFeedback.slice(0, 5).map((feedback) => (
+                    {feedbackStats.recentFeedback.map((feedback) => (
                       <div key={feedback.id} className="feedback-item">
                         <div className="feedback-item-header">
                           <div className="feedback-user">
@@ -402,7 +403,7 @@ export default function AnalyticsPage() {
                         </div>
                         <div className="feedback-material-name">{feedback.materialName}</div>
                         {feedback.comment && (
-                          <div className="feedback-comment">"{feedback.comment}"</div>
+                          <div className="feedback-comment">&ldquo;{feedback.comment}&rdquo;</div>
                         )}
                       </div>
                     ))}

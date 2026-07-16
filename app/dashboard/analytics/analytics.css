@@ -237,6 +237,24 @@
   color: var(--accent-pink);
 }
 
+.analytics-card-count {
+  margin-left: auto;
+  font-family: 'Poppins', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-purple);
+  background: rgba(124, 58, 237, 0.1);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+/* Cap the feedback list height so the trainer view scrolls rather than
+   pushing the page down when there are many entries. */
+.analytics-card-body .feedback-list {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
 .analytics-card-body {
   padding: 24px;
 }

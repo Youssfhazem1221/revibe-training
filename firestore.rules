@@ -94,15 +94,16 @@ service cloud.firestore {
     // Feedback Collection
     // ============================================
     match /feedback/{feedbackId} {
-      // Everyone authenticated can read feedback
-      allow read: if isSignedIn();
-      
+      // Feedback is private: only the author or a trainer can read it.
+      allow read: if isSignedIn() &&
+                     (resource.data.uid == request.auth.uid || isTrainer());
+
       // Users can create/update their own feedback
       // Document ID must match pattern: {uid}_{materialId}
       allow create: if isSignedIn() &&
                        request.resource.data.uid == request.auth.uid &&
                        feedbackId == request.auth.uid + '_' + request.resource.data.materialId &&
-                       request.resource.data.rating is int &&
+                       request.resource.data.rating is number &&
                        request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
                        (!('comment' in request.resource.data) ||
                         request.resource.data.comment.size() <= 500);
@@ -111,7 +112,7 @@ service cloud.firestore {
                        resource.data.uid == request.auth.uid &&
                        request.resource.data.uid == request.auth.uid &&
                        feedbackId == request.auth.uid + '_' + request.resource.data.materialId &&
-                       request.resource.data.rating is int &&
+                       request.resource.data.rating is number &&
                        request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
                        (!('comment' in request.resource.data) ||
                         request.resource.data.comment.size() <= 500);
