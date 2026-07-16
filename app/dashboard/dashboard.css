@@ -194,6 +194,33 @@
   font-weight: 600;
 }
 
+.upload-zone-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 440px;
+  margin: 4px auto 0;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.06);
+  border: 1px solid rgba(124, 58, 237, 0.12);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.upload-zone-hint i {
+  font-size: 16px;
+  color: var(--accent-purple, #7c3aed);
+  flex-shrink: 0;
+}
+
+.upload-zone-hint strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 .upload-zone input[type="file"] {
   position: absolute;
   inset: 0;
