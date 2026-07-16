@@ -264,6 +264,10 @@ export default function UploadZone({ onUploadComplete }) {
           <i className="material-icons upload-zone-icon">cloud_upload</i>
           <h3 className="upload-zone-title">Upload new material</h3>
           <p className="upload-zone-text">Drag and drop a PDF or PPTX, or <strong>Browse files</strong></p>
+          <p className="upload-zone-hint">
+            <i className="material-icons">lightbulb</i>
+            <span>Using Google Slides? Export via <strong>File → Download → PDF Document (.pdf)</strong> for the best quality and progress tracking.</span>
+          </p>
         </>
       )}
 
