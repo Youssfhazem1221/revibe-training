@@ -245,6 +245,20 @@
   color: var(--text-primary);
 }
 
+.section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.section-header-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
 /* ---- Search Bar ---- */
 .search-bar {
   position: relative;

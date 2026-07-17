@@ -3,8 +3,9 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAllMaterials, deleteMaterial } from '@/lib/materials';
+import { getAllMaterials, deleteMaterial, updateMaterialThumbnail } from '@/lib/materials';
 import { getUserProgress } from '@/lib/progress';
+import { generateThumbnailFromUrl } from '@/lib/pdfThumbnail';
 import Navbar from '@/components/Navbar';
 import UploadZone from '@/components/UploadZone';
 import ProgressBar from '@/components/ProgressBar';
@@ -20,6 +21,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingMaterials, setIsLoadingMaterials] = useState(true);
   const [userProgressMap, setUserProgressMap] = useState({});
+  const [regenState, setRegenState] = useState({ running: false, done: 0, total: 0 });
 
   const filteredMaterials = useMemo(() => {
     let filtered = materials;
@@ -89,6 +91,32 @@ export default function Dashboard() {
     }
   }, [user]);
 
+  // Trainer tool: re-render page 1 of every PDF material at HQ and update
+  // the stored thumbnail. Fixes low-res thumbnails from before the HQ change
+  // without needing to re-upload each material.
+  const handleRegenerateThumbnails = async () => {
+    const pdfs = materials.filter(m => !m.fileName?.toLowerCase().endsWith('.pptx') && m.downloadURL);
+    if (pdfs.length === 0) return;
+    if (!confirm(`Regenerate HQ thumbnails for ${pdfs.length} PDF material(s)? This re-renders each deck's first page.`)) return;
+
+    setRegenState({ running: true, done: 0, total: pdfs.length });
+    let done = 0;
+    for (const m of pdfs) {
+      try {
+        const dataUrl = await generateThumbnailFromUrl(m.downloadURL);
+        if (dataUrl) {
+          await updateMaterialThumbnail(m.id, dataUrl);
+          setMaterials(prev => prev.map(x => x.id === m.id ? { ...x, thumbnailURL: dataUrl } : x));
+        }
+      } catch (err) {
+        console.warn(`Failed to regenerate thumbnail for ${m.id}:`, err);
+      }
+      done += 1;
+      setRegenState({ running: true, done, total: pdfs.length });
+    }
+    setRegenState({ running: false, done, total: pdfs.length });
+  };
+
   const handleDelete = async (id, storagePath) => {
     if (confirm('Are you sure you want to delete this material?')) {
       try {
@@ -139,14 +167,31 @@ export default function Dashboard() {
 
         <div className="section-header">
           <h2 className="section-title">Training Materials</h2>
-          <div className="search-bar">
-            <i className="material-icons search-icon">search</i>
-            <input 
-              type="text" 
-              placeholder="Search by name or content..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="section-header-actions">
+            {isTrainer && materials.length > 0 && (
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={handleRegenerateThumbnails}
+                disabled={regenState.running}
+                title="Re-render HQ thumbnails for existing PDFs"
+              >
+                <i className={`material-icons ${regenState.running ? 'animate-spin' : ''}`} style={{ fontSize: '16px' }}>
+                  {regenState.running ? 'refresh' : 'hd'}
+                </i>
+                {regenState.running
+                  ? `Regenerating ${regenState.done}/${regenState.total}…`
+                  : 'Regenerate thumbnails'}
+              </button>
+            )}
+            <div className="search-bar">
+              <i className="material-icons search-icon">search</i>
+              <input
+                type="text"
+                placeholder="Search by name or content..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
