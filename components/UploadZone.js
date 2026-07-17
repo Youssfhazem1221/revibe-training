@@ -158,17 +158,24 @@ export default function UploadZone({ onUploadComplete }) {
             textContent.push({ page: i, text: pageText });
           }
 
-          // Generate thumbnail from page 1
+          // Generate a high-resolution thumbnail from page 1.
+          // The card displays it at ~100% width (up to ~380px) and Retina
+          // screens double that, so we render at 720px wide — PDFs are
+          // vector, so a larger render stays crisp — and use high JPEG
+          // quality to avoid the previous blurry/upscaled look.
           try {
+            const THUMB_WIDTH = 720;
             const page = await pdf.getPage(1);
-            const thumbScale = 240 / page.getViewport({ scale: 1 }).width;
+            const thumbScale = THUMB_WIDTH / page.getViewport({ scale: 1 }).width;
             const viewport = page.getViewport({ scale: thumbScale });
             const thumbCanvas = document.createElement('canvas');
-            thumbCanvas.width = viewport.width;
-            thumbCanvas.height = viewport.height;
+            thumbCanvas.width = Math.round(viewport.width);
+            thumbCanvas.height = Math.round(viewport.height);
             const ctx = thumbCanvas.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
             await page.render({ canvasContext: ctx, viewport }).promise;
-            thumbnailURL = thumbCanvas.toDataURL('image/jpeg', 0.7);
+            thumbnailURL = thumbCanvas.toDataURL('image/jpeg', 0.9);
           } catch (thumbErr) {
             console.warn('Failed to generate PDF thumbnail:', thumbErr);
           }
