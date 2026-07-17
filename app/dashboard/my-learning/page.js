@@ -10,10 +10,12 @@ import Navbar from '@/components/Navbar';
 import ProgressBar from '@/components/ProgressBar';
 import BadgesDisplay from '@/components/BadgesDisplay';
 import Certificate from '@/components/Certificate';
+import { useBadgeCelebration } from '@/components/BadgeCelebration';
 import './my-learning.css';
 
 export default function MyLearningPage() {
   const { user, loading } = useAuth();
+  const { checkForBadges } = useBadgeCelebration();
   const router = useRouter();
   
   const [progressList, setProgressList] = useState([]);
@@ -35,6 +37,8 @@ export default function MyLearningPage() {
   useEffect(() => {
     if (user) {
       loadUserData();
+      // Catch-up: celebrate any badges earned since the user last checked.
+      checkForBadges(user.uid);
     }
   }, [user]);
 

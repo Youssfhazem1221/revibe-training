@@ -3,8 +3,9 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { recordPageView } from '@/lib/progress';
+import { recordPageView, markMaterialCompleted } from '@/lib/progress';
 import { getUserMaterialFeedback } from '@/lib/feedback';
+import { useBadgeCelebration } from './BadgeCelebration';
 import FeedbackModal from './FeedbackModal';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -119,6 +120,8 @@ function PPTXViewer({ url, title, numPages, materialId, isTrainer, router }) {
 export default function PDFViewer({ url, title, materialId, isTrainer, textContent = [], pageCount = 0 }) {
   const router = useRouter();
   const { user } = useAuth();
+  const { checkForBadges } = useBadgeCelebration();
+  const [markState, setMarkState] = useState('idle'); // 'idle' | 'saving' | 'done'
   const [pdfDoc, setPdfDoc] = useState(null);
   const [pageNum, setPageNum] = useState(1);
   const [numPages, setNumPages] = useState(0);
@@ -268,12 +271,32 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
 
     recordedPagesRef.current.add(cacheKey);
     recordPageView(user.uid, materialId, pageNum, numPages, title || 'Untitled')
+      .then((justCompleted) => {
+        // Viewing the final unseen page completed the material — celebrate any
+        // badges this unlocked (First Victory, Dedicated, etc.).
+        if (justCompleted) checkForBadges(user.uid);
+      })
       .catch((err) => {
         // On failure, allow a retry next visit to the same page.
         recordedPagesRef.current.delete(cacheKey);
         console.warn('Failed to record page view:', err);
       });
-  }, [user, materialId, pageNum, numPages, title]);
+  }, [user, materialId, pageNum, numPages, title, checkForBadges]);
+
+  // Manual "Mark as complete" — completes the material regardless of which
+  // pages were visited, then checks for newly earned badges.
+  const handleMarkComplete = useCallback(async () => {
+    if (!user || !materialId || markState === 'saving') return;
+    setMarkState('saving');
+    try {
+      await markMaterialCompleted(user.uid, materialId, numPages || pageCount || 1, title || 'Untitled');
+      setMarkState('done');
+      checkForBadges(user.uid);
+    } catch (err) {
+      console.warn('Failed to mark complete:', err);
+      setMarkState('idle');
+    }
+  }, [user, materialId, numPages, pageCount, title, markState, checkForBadges]);
 
   // Reliable, client-side end-of-deck detection (no Firestore round-trip).
   const isLastPage = numPages > 0 && pageNum >= numPages;
@@ -481,6 +504,20 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
           >
             <i className="material-icons">rate_review</i>
           </button>
+          {!isTrainer && (
+            <button
+              className={`btn btn-sm ${markState === 'done' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={handleMarkComplete}
+              disabled={markState === 'saving' || markState === 'done'}
+              title="Mark this material as complete"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+            >
+              <i className={`material-icons ${markState === 'saving' ? 'animate-spin' : ''}`} style={{ fontSize: '18px' }}>
+                {markState === 'done' ? 'task_alt' : markState === 'saving' ? 'refresh' : 'check_circle'}
+              </i>
+              {markState === 'done' ? 'Completed' : 'Mark complete'}
+            </button>
+          )}
           {isTrainer && (
             <button
               className="btn btn-outline-pink btn-sm"
@@ -551,6 +588,18 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
                     </span>
                   </div>
                   <div className="viewer-end-banner-actions">
+                    {!isTrainer && (
+                      <button
+                        className="viewer-end-btn"
+                        onClick={handleMarkComplete}
+                        disabled={markState === 'saving' || markState === 'done'}
+                      >
+                        <i className={`material-icons ${markState === 'saving' ? 'animate-spin' : ''}`}>
+                          {markState === 'done' ? 'task_alt' : markState === 'saving' ? 'refresh' : 'check_circle'}
+                        </i>
+                        {markState === 'done' ? 'Completed' : 'Mark complete'}
+                      </button>
+                    )}
                     <button className="viewer-end-btn primary" onClick={() => setShowFeedbackModal(true)}>
                       <i className="material-icons">rate_review</i>
                       {isTrainer ? 'Preview feedback' : 'Rate this material'}
@@ -586,7 +635,8 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
         isOpen={showFeedbackModal}
         onClose={() => setShowFeedbackModal(false)}
         onSubmitSuccess={() => {
-          console.log('Feedback submitted successfully');
+          // Giving feedback can unlock badges (Voice of Improvement, Quality Rater).
+          if (user) checkForBadges(user.uid);
         }}
       />
     </>
