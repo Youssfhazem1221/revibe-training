@@ -49,6 +49,7 @@ export function AuthProvider({ children }) {
             }
           } else {
             await setDoc(userRef, {
+              uid: firebaseUser.uid, // required by the users create rule
               email: firebaseUser.email,
               displayName: firebaseUser.displayName,
               photoURL: firebaseUser.photoURL,

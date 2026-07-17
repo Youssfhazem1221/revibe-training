@@ -139,8 +139,33 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
   const pageInputRef = useRef(null);
   const searchInputRef = useRef(null);
   const recordedPagesRef = useRef(new Set());
+  const containerRef = useRef(null);
+  const userZoomedRef = useRef(false);
 
   const isPPTX = url?.toLowerCase().includes('.pptx');
+
+  // Compute the zoom scale that makes a page fit the available viewport,
+  // so slides open filling the screen instead of rendering small then
+  // being resized. Accounts for container padding and device pixel ratio.
+  const computeFitScale = useCallback((page) => {
+    const el = containerRef.current;
+    const padding = 48; // matches .viewer-main padding
+    const availW = (el?.clientWidth || window.innerWidth) - padding;
+    const availH = (el?.clientHeight || window.innerHeight) - padding;
+    const base = page.getViewport({ scale: 1 });
+    const fit = Math.min(availW / base.width, availH / base.height);
+    return Math.max(0.2, Math.min(fit, 4)); // clamp to sane bounds
+  }, []);
+
+  // Reset zoom so the current page fills the viewport.
+  const fitToPage = useCallback(async () => {
+    if (!pdfDoc) return;
+    try {
+      const page = await pdfDoc.getPage(pageNum);
+      userZoomedRef.current = false;
+      setScale(computeFitScale(page));
+    } catch (_) { /* ignore */ }
+  }, [pdfDoc, pageNum, computeFitScale]);
 
   // ── Load PDF ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -150,16 +175,38 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
       try {
         const loadingTask = pdfjsLib.getDocument(url);
         const pdf = await loadingTask.promise;
-        setPdfDoc(pdf);
+        // Compute the fit-to-page scale from page 1 BEFORE the first render,
+        // and set it in the same batch as pdfDoc so the initial paint is
+        // already full-size (no small-then-adjust flash).
+        try {
+          const firstPage = await pdf.getPage(1);
+          userZoomedRef.current = false;
+          setScale(computeFitScale(firstPage));
+        } catch (_) { /* fall back to current scale */ }
         setNumPages(pdf.numPages);
         setPageNum(1);
+        setPdfDoc(pdf);
       } catch (error) {
         console.error('Error loading PDF:', error);
       }
     };
 
     loadDoc();
-  }, [url, isPPTX]);
+  }, [url, isPPTX, computeFitScale]);
+
+  // Re-fit when the window resizes, unless the user has manually zoomed.
+  useEffect(() => {
+    if (!pdfDoc) return;
+    const onResize = async () => {
+      if (userZoomedRef.current) return;
+      try {
+        const page = await pdfDoc.getPage(pageNum);
+        setScale(computeFitScale(page));
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [pdfDoc, pageNum, computeFitScale]);
 
   // ── Slideshow Auto-Advance Effect ───────────────────────────────────────────
   useEffect(() => {
@@ -362,11 +409,18 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
           </div>
 
           <div className="viewer-zoom-controls">
-            <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setScale(s => Math.max(0.5, s - 0.25))}>
+            <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { userZoomedRef.current = true; setScale(s => Math.max(0.25, s - 0.25)); }}>
               <i className="material-icons">remove</i>
             </button>
-            <div className="viewer-zoom-level">{Math.round(scale * 100)}%</div>
-            <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setScale(s => Math.min(3.0, s + 0.25))}>
+            <button
+              className="viewer-zoom-level"
+              onClick={fitToPage}
+              title="Fit to page"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+            >
+              {Math.round(scale * 100)}%
+            </button>
+            <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { userZoomedRef.current = true; setScale(s => Math.min(4.0, s + 0.25)); }}>
               <i className="material-icons">add</i>
             </button>
           </div>
@@ -408,7 +462,7 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
           </div>
           <button
             className={`btn ${presentationMode ? 'btn-primary' : 'btn-ghost'} btn-icon`}
-            onClick={() => { setPresentationMode(!presentationMode); setScale(!presentationMode ? 1.5 : 1.0); }}
+            onClick={() => { setPresentationMode(!presentationMode); fitToPage(); }}
             title="Presentation Mode"
           >
             <i className="material-icons">{presentationMode ? 'fullscreen_exit' : 'slideshow'}</i>
@@ -469,7 +523,7 @@ export default function PDFViewer({ url, title, materialId, isTrainer, textConte
         </div>
 
         {/* Canvas */}
-        <div className="viewer-main">
+        <div className="viewer-main" ref={containerRef}>
           {pdfDoc ? (
             <div className="viewer-page-wrapper" style={{ position: 'relative' }}>
               {isPageRendering && (
