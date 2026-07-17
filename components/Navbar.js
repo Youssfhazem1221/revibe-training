@@ -58,7 +58,14 @@ export default function Navbar({ title = 'Dashboard' }) {
     <nav className="navbar">
       <div className="navbar-brand">
         <div className="navbar-logo-group">
-          <div className="navbar-logo gradient-text">REVIBE</div>
+          <button
+            className="navbar-logo gradient-text"
+            onClick={() => router.push('/dashboard')}
+            title="Go to dashboard"
+            aria-label="Go to dashboard"
+          >
+            REVIBE
+          </button>
           <span className="navbar-version" title={`App version ${APP_VERSION}`}>v{APP_VERSION}</span>
         </div>
         <div className="navbar-divider"></div>

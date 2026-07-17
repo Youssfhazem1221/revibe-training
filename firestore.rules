@@ -72,8 +72,12 @@ service cloud.firestore {
     match /progress/{progressId} {
       // Users can read their own progress
       // Trainers can read all progress records
-      allow read: if isSignedIn() && 
-                     (resource.data.uid == request.auth.uid || isTrainer());
+      // (resource == null lets a get() on a not-yet-created doc resolve
+      // instead of erroring on resource.data)
+      allow read: if isSignedIn() &&
+                     (resource == null ||
+                      resource.data.uid == request.auth.uid ||
+                      isTrainer());
       
       // Users can create/update their own progress
       // Document ID must match pattern: {uid}_{materialId}
@@ -95,8 +99,13 @@ service cloud.firestore {
     // ============================================
     match /feedback/{feedbackId} {
       // Feedback is private: only the author or a trainer can read it.
+      // (resource == null lets the pre-submit get() on a not-yet-created
+      // doc resolve instead of erroring on resource.data — which was
+      // blocking trainees' first feedback submission.)
       allow read: if isSignedIn() &&
-                     (resource.data.uid == request.auth.uid || isTrainer());
+                     (resource == null ||
+                      resource.data.uid == request.auth.uid ||
+                      isTrainer());
 
       // Users can create/update their own feedback
       // Document ID must match pattern: {uid}_{materialId}

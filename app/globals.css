@@ -525,6 +525,25 @@ ul, ol {
   font-weight: 900;
   letter-spacing: 1px;
   line-height: 1;
+  /* button reset (logo is a clickable home link).
+     NOTE: don't set `background` here — .gradient-text supplies the
+     gradient that's clipped to the text. */
+  border: none;
+  padding: 0;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.navbar-logo:hover {
+  opacity: 0.85;
+}
+
+.navbar-logo:focus-visible {
+  outline: 2px solid var(--accent-pink, #ff2e63);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 .navbar-version {
