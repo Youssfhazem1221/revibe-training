@@ -1,109 +1,138 @@
 'use client';
 
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { APP_VERSION } from '@/lib/version';
+import { Avatar } from '@/components/ui';
+import './Navbar.css';
 
-export default function Navbar({ title = 'Dashboard' }) {
-  const { user, role, isTrainer, signOut } = useAuth();
+const LINKS = [
+  { name: 'Library', path: '/dashboard', icon: 'auto_stories', roles: ['trainer', 'trainee'] },
+  { name: 'My learning', path: '/dashboard/my-learning', icon: 'school', roles: ['trainee'] },
+  { name: 'Analytics', path: '/dashboard/analytics', icon: 'insights', roles: ['trainer'] },
+  { name: 'People', path: '/dashboard/users', icon: 'group', roles: ['trainer'] },
+];
+
+export default function Navbar({ title }) {
+  const { user, isTrainer, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const menuRef = useRef(null);
+
+  const role = isTrainer ? 'trainer' : 'trainee';
+  const links = LINKS.filter((l) => l.roles.includes(role));
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'User';
+  const firstName = displayName.split(' ')[0];
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e) => { if (!menuRef.current?.contains(e.target)) setMenuOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   const handleSignOut = async () => {
+    setMenuOpen(false);
     await signOut();
     router.push('/');
   };
 
-  const displayName = user?.displayName || user?.email?.split('@')[0] || 'User';
-  const initials = displayName.substring(0, 2).toUpperCase();
-
-  const navLinks = [
-    {
-      name: 'Dashboard',
-      path: '/dashboard',
-      icon: 'dashboard',
-      forTrainer: false,
-      forTrainee: true
-    },
-    {
-      name: 'My Learning',
-      path: '/dashboard/my-learning',
-      icon: 'school',
-      forTrainer: false,
-      forTrainee: true
-    },
-    {
-      name: 'Analytics',
-      path: '/dashboard/analytics',
-      icon: 'analytics',
-      forTrainer: true,
-      forTrainee: false
-    },
-    {
-      name: 'Users',
-      path: '/dashboard/users',
-      icon: 'people',
-      forTrainer: true,
-      forTrainee: false
-    }
-  ];
-
-  const visibleLinks = navLinks.filter(link => {
-    if (isTrainer && link.forTrainer) return true;
-    if (!isTrainer && link.forTrainee) return true;
-    return false;
-  });
+  const isActive = (path) => pathname === path;
 
   return (
-    <nav className="navbar">
-      <div className="navbar-brand">
-        <div className="navbar-logo-group">
-          <button
-            className="navbar-logo gradient-text"
-            onClick={() => router.push('/dashboard')}
-            title="Go to dashboard"
-            aria-label="Go to dashboard"
-          >
-            REVIBE
-          </button>
-          <span className="navbar-version" title={`App version ${APP_VERSION}`}>v{APP_VERSION}</span>
-        </div>
-        <div className="navbar-divider"></div>
-        <div className="navbar-page-title">{title}</div>
-      </div>
+    <>
+      {title && <title>{`${title} · Revibe Training`}</title>}
+      <header className={`nav ${scrolled ? 'is-scrolled' : ''}`}>
+        <div className="nav-inner">
+          <Link href="/dashboard" className="wordmark nav-brand" aria-label="Revibe Training home">
+            <span className="wordmark-logo">REVIBE</span>
+            <span className="wordmark-product">Training</span>
+          </Link>
+          <span className="nav-version" title={`App version ${APP_VERSION}`}>v{APP_VERSION}</span>
 
-      {/* Navigation Links */}
-      <div className="navbar-nav">
-        {visibleLinks.map(link => (
-          <button
-            key={link.path}
-            className={`navbar-nav-link ${pathname === link.path ? 'active' : ''}`}
-            onClick={() => router.push(link.path)}
-            title={link.name}
-          >
-            <i className="material-icons">{link.icon}</i>
-            <span>{link.name}</span>
-          </button>
-        ))}
-      </div>
-      
-      <div className="navbar-actions">
-        <div className="navbar-user">
-          <div className="navbar-avatar">{initials}</div>
-          <div className="navbar-user-meta">
-            <div className="navbar-email">{displayName}</div>
-            {role && (
-              <span className={`navbar-role-tag ${isTrainer ? 'is-trainer' : 'is-trainee'}`}>
-                {isTrainer ? 'Trainer' : 'Trainee'}
+          <nav className="nav-links" aria-label="Main">
+            {links.map((link) => (
+              <Link
+                key={link.path}
+                href={link.path}
+                className={`nav-link ${isActive(link.path) ? 'active' : ''}`}
+                aria-current={isActive(link.path) ? 'page' : undefined}
+              >
+                {link.name}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="nav-user" ref={menuRef}>
+            <button
+              className={`nav-user-btn ${menuOpen ? 'open' : ''}`}
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+            >
+              <Avatar src={user?.photoURL} name={displayName} size={34} />
+              <span className="nav-user-meta">
+                <span className="nav-user-name">{firstName}</span>
+                <span className={`nav-user-role ${role}`}>{isTrainer ? 'Trainer' : 'Trainee'}</span>
               </span>
+              <i className="material-icons nav-user-caret">expand_more</i>
+            </button>
+
+            {menuOpen && (
+              <div className="nav-menu" role="menu">
+                <div className="nav-menu-head">
+                  <Avatar src={user?.photoURL} name={displayName} size={42} />
+                  <div style={{ minWidth: 0 }}>
+                    <div className="nav-menu-name">{displayName}</div>
+                    <div className="nav-menu-email">{user?.email}</div>
+                  </div>
+                </div>
+                <div className="nav-menu-sep" />
+                {!isTrainer && (
+                  <Link href="/dashboard/my-learning#badges" className="nav-menu-item" role="menuitem" onClick={() => setMenuOpen(false)}>
+                    <i className="material-icons">workspace_premium</i> Badges & certificates
+                  </Link>
+                )}
+                <button className="nav-menu-item danger" role="menuitem" onClick={handleSignOut}>
+                  <i className="material-icons">logout</i> Sign out
+                </button>
+                <div className="nav-menu-foot">Revibe Training Hub · v{APP_VERSION}</div>
+              </div>
             )}
           </div>
         </div>
+      </header>
 
-        <button onClick={handleSignOut} className="navbar-signout" title="Sign out" aria-label="Sign out">
-          <i className="material-icons">logout</i>
-        </button>
-      </div>
-    </nav>
+      {/* Phone tab bar */}
+      <nav className="tabbar" aria-label="Main">
+        {links.map((link) => (
+          <Link
+            key={link.path}
+            href={link.path}
+            className={`tabbar-link ${isActive(link.path) ? 'active' : ''}`}
+            aria-current={isActive(link.path) ? 'page' : undefined}
+          >
+            <i className="material-icons">{link.icon}</i>
+            <span>{link.name}</span>
+          </Link>
+        ))}
+      </nav>
+    </>
   );
 }
