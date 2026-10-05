@@ -3,6 +3,7 @@ import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { BadgeCelebrationProvider } from '@/components/BadgeCelebration';
 import UpdateNotificationBanner from '@/components/UpdateNotificationBanner';
+import PartnerTypePicker from '@/components/PartnerTypePicker';
 
 const poppins = Poppins({
   weight: ['400', '500', '600', '700', '800', '900'],
@@ -40,6 +41,7 @@ export default function RootLayout({ children }) {
       <body suppressHydrationWarning>
         <AuthProvider>
           <BadgeCelebrationProvider>
+            <PartnerTypePicker />
             <UpdateNotificationBanner />
             {children}
           </BadgeCelebrationProvider>

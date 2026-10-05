@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { uploadMaterial, logMaterialUpdate } from '@/lib/materials';
 import { useAuth } from '@/contexts/AuthContext';
+import { DEFAULT_CATEGORY, PARTNER_TYPES } from '@/lib/categories';
 
 // Helper to generate a stunning custom Revibe branded gradient thumbnail for presentations
 const generateRevibePresentationThumbnail = (fileName) => {
@@ -86,7 +87,10 @@ const generateRevibePresentationThumbnail = (fileName) => {
   return canvas.toDataURL('image/jpeg', 0.85);
 };
 
-export default function UploadZone({ onUploadComplete }) {
+export default function UploadZone({ onUploadComplete, categories = [] }) {
+  const [category, setCategory] = useState(DEFAULT_CATEGORY);
+  const selectedCategory = categories.find(c => c.name === category);
+  const audiences = selectedCategory?.audiences || [];
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -205,7 +209,8 @@ export default function UploadZone({ onUploadComplete }) {
       }
 
       const metadata = {
-        category: 'General',
+        category,
+        audiences,
         pageCount: pageCount,
         thumbnailURL: thumbnailURL,
         uploadedBy: user?.email || 'unknown',
@@ -218,7 +223,7 @@ export default function UploadZone({ onUploadComplete }) {
 
       // Notify all users that a new material was added (one-off banner next login).
       try {
-        await logMaterialUpdate(result.id, result.name, user?.displayName || user?.email || 'A trainer', 'added');
+        await logMaterialUpdate(result.id, result.name, user?.displayName || user?.email || 'A trainer', 'added', audiences);
       } catch (notifyErr) {
         console.warn('Could not log material-added notification:', notifyErr);
       }
@@ -278,6 +283,17 @@ export default function UploadZone({ onUploadComplete }) {
           <i className="material-icons upload-zone-icon">cloud_upload</i>
           <h3 className="upload-zone-title">Upload new material</h3>
           <p className="upload-zone-text">Drag and drop a PDF or PPTX, or <strong>Browse files</strong></p>
+          <div className="upload-zone-category" onClick={(e) => e.stopPropagation()}>
+            <label htmlFor="upload-category">Category</label>
+            <select id="upload-category" value={category} onChange={(e) => setCategory(e.target.value)}>
+              {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </select>
+            <span className="upload-zone-audience">
+              {audiences.length === 0
+                ? 'Revibe only'
+                : `Revibe + ${PARTNER_TYPES.filter(p => audiences.includes(p.id)).map(p => p.label).join(' + ')}`}
+            </span>
+          </div>
           <p className="upload-zone-hint">
             <i className="material-icons">lightbulb</i>
             <span>Using Google Slides? Export via <strong>File → Download → PDF Document (.pdf)</strong> for the best quality and progress tracking.</span>

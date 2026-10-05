@@ -3,27 +3,37 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAllMaterials, deleteMaterial, updateMaterialThumbnail } from '@/lib/materials';
+import { getAllMaterials, deleteMaterial, updateMaterialThumbnail, updateMaterialCategory } from '@/lib/materials';
+import { getCategories, PARTNER_TYPES } from '@/lib/categories';
 import { getUserProgress } from '@/lib/progress';
 import { generateThumbnailFromUrl } from '@/lib/pdfThumbnail';
 import Navbar from '@/components/Navbar';
 import UploadZone from '@/components/UploadZone';
 import ProgressBar from '@/components/ProgressBar';
 import ReuploadModal from '@/components/ReuploadModal';
+import CategoryManager from '@/components/CategoryManager';
 import './dashboard.css';
 
 export default function Dashboard() {
-  const { user, isTrainer, loading } = useAuth();
+  const { user, isTrainer, isPartner, partnerType, loading } = useAuth();
   const router = useRouter();
   
   const [materials, setMaterials] = useState([]);
-  const [categories, setCategories] = useState(['All', 'General', 'Onboarding', 'Technical']);
+  const [categoryList, setCategoryList] = useState([]); // trainer: full category docs
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingMaterials, setIsLoadingMaterials] = useState(true);
   const [userProgressMap, setUserProgressMap] = useState({});
   const [regenState, setRegenState] = useState({ running: false, done: 0, total: 0 });
   const [reuploadMaterial, setReuploadMaterial] = useState(null);
+
+  // Pills: categories that actually have materials (+ empty ones for trainers)
+  const categories = useMemo(() => {
+    const names = new Set(materials.map(m => m.category).filter(Boolean));
+    categoryList.forEach(c => names.add(c.name));
+    return ['All', ...Array.from(names).sort()];
+  }, [materials, categoryList]);
 
   const filteredMaterials = useMemo(() => {
     let filtered = materials;
@@ -43,17 +53,20 @@ export default function Dashboard() {
   const loadMaterials = useCallback(async () => {
     setIsLoadingMaterials(true);
     try {
-      const data = await getAllMaterials();
+      const data = await getAllMaterials(isPartner ? partnerType : null);
       setMaterials(data);
-      
-      // Extract dynamic categories
-      const uniqueCats = new Set(['All', 'General', 'Onboarding', 'Technical']);
-      data.forEach(m => { if (m.category) uniqueCats.add(m.category); });
-      setCategories(Array.from(uniqueCats));
     } catch (error) {
       console.error("Failed to load materials", error);
     }
     setIsLoadingMaterials(false);
+  }, [isPartner, partnerType]);
+
+  const loadCategories = useCallback(async () => {
+    try {
+      setCategoryList(await getCategories());
+    } catch (error) {
+      console.error('Failed to load categories', error);
+    }
   }, []);
 
   useEffect(() => {
@@ -63,13 +76,34 @@ export default function Dashboard() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (user) {
+    // Partners wait until they've picked seller / repair partner
+    if (user && !(isPartner && !partnerType)) {
       const id = requestAnimationFrame(() => {
         loadMaterials();
       });
       return () => cancelAnimationFrame(id);
     }
-  }, [user, loadMaterials]);
+  }, [user, isPartner, partnerType, loadMaterials]);
+
+  useEffect(() => {
+    if (isTrainer) {
+      const id = requestAnimationFrame(() => {
+        loadCategories();
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [isTrainer, loadCategories]);
+
+  const handleCategoryChange = async (material, categoryName) => {
+    const audiences = categoryList.find(c => c.name === categoryName)?.audiences || [];
+    try {
+      await updateMaterialCategory(material.id, categoryName, audiences);
+      setMaterials(prev => prev.map(m => m.id === material.id ? { ...m, category: categoryName, audiences } : m));
+    } catch (error) {
+      console.error('Failed to change category', error);
+      alert('Failed to change category');
+    }
+  };
 
   // Load user progress data
   useEffect(() => {
@@ -164,12 +198,21 @@ export default function Dashboard() {
 
       <main className="dashboard-content">
         {isTrainer && (
-          <UploadZone onUploadComplete={(newMaterial) => setMaterials([newMaterial, ...materials])} />
+          <UploadZone
+            categories={categoryList}
+            onUploadComplete={(newMaterial) => setMaterials([newMaterial, ...materials])}
+          />
         )}
 
         <div className="section-header">
           <h2 className="section-title">Training Materials</h2>
           <div className="section-header-actions">
+            {isTrainer && (
+              <button className="btn btn-outline btn-sm" onClick={() => setShowCategoryManager(true)}>
+                <i className="material-icons" style={{ fontSize: '16px' }}>label</i>
+                Categories
+              </button>
+            )}
             {isTrainer && materials.length > 0 && (
               <button
                 className="btn btn-outline btn-sm"
@@ -246,7 +289,21 @@ export default function Dashboard() {
                   <div className="material-meta">
                     <div className="material-meta-item">
                       <i className="material-icons">folder</i>
-                      <span>{material.category}</span>
+                      {isTrainer ? (
+                        <select
+                          className="material-category-select"
+                          value={material.category}
+                          onChange={(e) => handleCategoryChange(material, e.target.value)}
+                          title="Move to category"
+                        >
+                          {!categoryList.some(c => c.name === material.category) && (
+                            <option value={material.category}>{material.category}</option>
+                          )}
+                          {categoryList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                        </select>
+                      ) : (
+                        <span>{material.category}</span>
+                      )}
                     </div>
                     <div className="material-meta-item">
                       <i className="material-icons">schedule</i>
@@ -254,6 +311,18 @@ export default function Dashboard() {
                     </div>
                   </div>
                   
+                  {isTrainer && (
+                    <div className="material-audiences">
+                      {(material.audiences || []).length === 0 ? (
+                        <span className="audience-tag internal">Revibe only</span>
+                      ) : PARTNER_TYPES.filter(p => material.audiences.includes(p.id)).map(p => (
+                        <span key={p.id} className="audience-tag">
+                          <i className="material-icons">{p.icon}</i>{p.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Progress Bar */}
                   {userProgressMap[material.id] && (
                     <div className="material-progress" style={{ marginTop: '12px', marginBottom: '8px' }}>
@@ -306,6 +375,17 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {showCategoryManager && (
+        <CategoryManager
+          categories={categoryList}
+          onClose={() => setShowCategoryManager(false)}
+          onChanged={async () => {
+            await loadCategories();
+            await loadMaterials();
+          }}
+        />
+      )}
 
       {reuploadMaterial && (
         <ReuploadModal

@@ -3,9 +3,10 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { APP_VERSION } from '@/lib/version';
+import { partnerTypeLabel } from '@/lib/categories';
 
 export default function Navbar({ title = 'Dashboard' }) {
-  const { user, role, isTrainer, signOut } = useAuth();
+  const { user, role, isTrainer, isPartner, partnerType, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -94,7 +95,7 @@ export default function Navbar({ title = 'Dashboard' }) {
             <div className="navbar-email">{displayName}</div>
             {role && (
               <span className={`navbar-role-tag ${isTrainer ? 'is-trainer' : 'is-trainee'}`}>
-                {isTrainer ? 'Trainer' : 'Trainee'}
+                {isTrainer ? 'Trainer' : (isPartner ? (partnerTypeLabel(partnerType) || 'Partner') : 'Trainee')}
               </span>
             )}
           </div>

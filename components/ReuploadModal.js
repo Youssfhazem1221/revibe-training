@@ -212,7 +212,9 @@ export default function ReuploadModal({ material, onClose, onSuccess }) {
         await logMaterialUpdate(
           material.id,
           material.name,
-          user?.displayName || user?.email || 'Trainer'
+          user?.displayName || user?.email || 'Trainer',
+          'updated',
+          material.audiences || []
         );
       } catch (logErr) {
         console.warn('Could not log material update notification:', logErr);

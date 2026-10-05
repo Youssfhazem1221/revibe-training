@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAllUsers, updateUserRole, searchUsers } from '@/lib/users';
+import { getAllUsers, updateUserRole, updateUserPartnerType, searchUsers } from '@/lib/users';
+import { isRevibeEmail, PARTNER_TYPES } from '@/lib/categories';
 import Navbar from '@/components/Navbar';
 import './users.css';
 
@@ -112,6 +113,18 @@ export default function UsersPage() {
         ? 'Permission denied by Firestore rules. Make sure the latest firestore.rules are deployed in the Firebase Console.'
         : (error?.message || 'Unknown error');
       alert(`Failed to update user role: ${reason}`);
+    }
+    setUpdatingUserId(null);
+  };
+
+  const handlePartnerTypeUpdate = async (uid, partnerType) => {
+    setUpdatingUserId(uid);
+    try {
+      await updateUserPartnerType(uid, partnerType);
+      setUsers(users.map(u => u.uid === uid ? { ...u, partnerType } : u));
+    } catch (error) {
+      console.error('Error updating partner type:', error);
+      alert(`Failed to update partner type: ${error?.message || 'Unknown error'}`);
     }
     setUpdatingUserId(null);
   };
@@ -235,6 +248,7 @@ export default function UsersPage() {
                   <th>User</th>
                   <th>Email</th>
                   <th>Role</th>
+                  <th>Department</th>
                   <th>Status</th>
                   <th>Last Login</th>
                   <th>Joined</th>
@@ -265,6 +279,22 @@ export default function UsersPage() {
                         </i>
                         {u.role}
                       </span>
+                    </td>
+                    <td>
+                      {isRevibeEmail(u.email) ? (
+                        <span className="dept-badge revibe">Revibe</span>
+                      ) : (
+                        <select
+                          className={`dept-select ${u.partnerType ? '' : 'is-unset'}`}
+                          value={u.partnerType || ''}
+                          disabled={updatingUserId === u.uid}
+                          onChange={(e) => handlePartnerTypeUpdate(u.uid, e.target.value)}
+                          title="Partner type"
+                        >
+                          {!u.partnerType && <option value="" disabled>Not chosen yet</option>}
+                          {PARTNER_TYPES.map(p => <option key={p.id} value={p.id}>{p.short}</option>)}
+                        </select>
+                      )}
                     </td>
                     <td>
                       <span className={`status-badge ${u._online ? 'is-online' : (u._active ? 'is-active' : 'is-inactive')}`}>

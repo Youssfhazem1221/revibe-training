@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import {
-  collection, getDocs, query, orderBy,
+  collection, getDocs, query, orderBy, where,
   doc, getDoc, setDoc, arrayUnion
 } from 'firebase/firestore';
 
@@ -12,11 +12,16 @@ import {
  * Fetches materialUpdates that the current user hasn't dismissed yet.
  * Dismissed IDs are stored in Firestore at notificationDismissals/{uid}
  */
-async function getUnseenUpdates(uid) {
+async function getUnseenUpdates(uid, partnerType) {
+  // Partners must filter by audience (rules reject unfiltered reads); sort
+  // client-side since array-contains + orderBy would need a composite index.
   const updatesSnap = await getDocs(
-    query(collection(db, 'materialUpdates'), orderBy('updatedAt', 'desc'))
+    partnerType
+      ? query(collection(db, 'materialUpdates'), where('audiences', 'array-contains', partnerType))
+      : query(collection(db, 'materialUpdates'), orderBy('updatedAt', 'desc'))
   );
   const all = updatesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  if (partnerType) all.sort((a, b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0));
 
   const dismissRef = doc(db, 'notificationDismissals', uid);
   const dismissSnap = await getDoc(dismissRef);
@@ -31,19 +36,19 @@ async function markAsSeen(uid, ids) {
 }
 
 export default function UpdateNotificationBanner() {
-  const { user } = useAuth();
+  const { user, isPartner, partnerType } = useAuth();
   const [updates, setUpdates] = useState([]);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    getUnseenUpdates(user.uid).then(unseen => {
+    if (!user || (isPartner && !partnerType)) return;
+    getUnseenUpdates(user.uid, isPartner ? partnerType : null).then(unseen => {
       if (unseen.length > 0) {
         setUpdates(unseen);
         setVisible(true);
       }
     }).catch(err => console.warn('Could not fetch update notifications:', err));
-  }, [user]);
+  }, [user, isPartner, partnerType]);
 
   const handleDismiss = async () => {
     setVisible(false);
