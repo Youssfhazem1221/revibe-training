@@ -42,3 +42,12 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# local preview mode sample decks (npm run dev:preview)
+/public/preview-files/
+
+# gstack browse state
+/.gstack/

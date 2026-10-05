@@ -1,9 +1,10 @@
 {
   "name": "revibe-training-hub",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:preview": "node demo/dev.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

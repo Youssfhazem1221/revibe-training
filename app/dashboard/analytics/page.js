@@ -1,436 +1,783 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
-import { getPlatformStats } from '@/lib/progress';
-import { getPlatformFeedbackStats } from '@/lib/feedback';
-import { getPlatformUserStats, getUserLeaderboard } from '@/lib/users';
-import { getAllMaterials } from '@/lib/materials';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import toast from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
+import { RequireAuth, Skeleton, EmptyState, Avatar, StatTile, Spinner, timeAgo, formatDate } from '@/components/ui';
+import { getAllProgress, buildMaterialInsights, buildActivitySeries, buildLeaderboard } from '@/lib/progress';
+import { getAllFeedback } from '@/lib/feedback';
+import { getAllUsers } from '@/lib/users';
+import { getAllMaterials } from '@/lib/materials';
 import './analytics.css';
 
+const ACTIVITY_DAYS = 14;
+const FEEDBACK_PAGE = 6;
+
+const COLUMNS = [
+  { key: 'name', label: 'Material', type: 'text' },
+  { key: 'started', label: 'Learners', type: 'num' },
+  { key: 'completed', label: 'Completed', type: 'num' },
+  { key: 'completionRate', label: 'Completion rate', type: 'num' },
+  { key: 'avgRating', label: 'Rating', type: 'num' },
+  { key: 'lastActivity', label: 'Last activity', type: 'date' },
+];
+
 export default function AnalyticsPage() {
-  const { user, isTrainer, loading } = useAuth();
-  const router = useRouter();
-  
-  const [progressStats, setProgressStats] = useState(null);
-  const [feedbackStats, setFeedbackStats] = useState(null);
-  const [userStats, setUserStats] = useState(null);
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [materials, setMaterials] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  return (
+    <RequireAuth role="trainer">
+      <AnalyticsView />
+    </RequireAuth>
+  );
+}
 
-  // Redirect if not trainer
+/* -------------------------------------------------------------------------- */
+
+function csvCell(value) {
+  let s = value == null ? '' : String(value);
+  if (/^[=+\-@]/.test(s)) s = `'${s}`; // keep spreadsheet apps from running formulas
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function downloadCsv(filename, rows) {
+  const csv = rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function isDone(p) {
+  return !!p.completed || ((p.totalPages || 0) > 0 && (p.viewedPages || []).length >= p.totalPages);
+}
+
+function Stars({ value, size = 16 }) {
+  const rounded = Math.round(value);
+  return (
+    <span className="an-stars" role="img" aria-label={`Rated ${value} out of 5`}>
+      {[1, 2, 3, 4, 5].map((s) => (
+        <i key={s} className={`material-icons ${s <= rounded ? 'on' : ''}`} style={{ fontSize: size }} aria-hidden="true">
+          star
+        </i>
+      ))}
+    </span>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+/** One round of reads powers every widget on the page. */
+async function fetchAnalytics() {
+  const [materials, progress, feedback, users] = await Promise.all([
+    getAllMaterials(),
+    getAllProgress(),
+    getAllFeedback(),
+    getAllUsers(),
+  ]);
+  return {
+    materials,
+    progress,
+    feedback,
+    users,
+    series: buildActivitySeries(progress, ACTIVITY_DAYS, Date.now()),
+  };
+}
+
+function AnalyticsView() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
   useEffect(() => {
-    if (!loading && (!user || !isTrainer)) {
-      router.push('/dashboard');
-    }
-  }, [user, isTrainer, loading, router]);
+    let active = true;
+    fetchAnalytics()
+      .then((next) => {
+        if (active) setData(next);
+      })
+      .catch((err) => {
+        console.error('Error loading analytics:', err);
+        if (active) setLoadError(err?.message || 'Something went wrong');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
 
-  // Load analytics data
-  useEffect(() => {
-    if (isTrainer) {
-      loadAnalytics();
-    }
-  }, [isTrainer]);
-
-  const loadAnalytics = async () => {
-    setIsLoading(true);
+  const handleRefresh = async () => {
+    setRefreshing(true);
     try {
-      const [progress, feedback, users, topUsers, allMaterials] = await Promise.all([
-        getPlatformStats(),
-        getPlatformFeedbackStats(),
-        getPlatformUserStats(),
-        getUserLeaderboard(10),
-        getAllMaterials()
-      ]);
-
-      setProgressStats(progress);
-      setFeedbackStats(feedback);
-      setUserStats(users);
-      setLeaderboard(topUsers);
-      setMaterials(allMaterials);
-    } catch (error) {
-      console.error('Error loading analytics:', error);
+      setData(await fetchAnalytics());
+      setLoadError(null);
+      toast.success('Analytics are up to date');
+    } catch (err) {
+      console.error('Error refreshing analytics:', err);
+      toast.error('Could not refresh analytics. Try again in a moment.');
+    } finally {
+      setRefreshing(false);
     }
-    setIsLoading(false);
   };
 
-  // Format a feedback timestamp (ISO string) into an absolute date + time.
-  const formatFeedbackDate = (iso) => {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleString('en-US', {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: 'numeric', minute: '2-digit'
-    });
-  };
+  const view = useMemo(() => {
+    if (!data) return null;
+    const { materials, progress, feedback, users } = data;
+    const trainers = users.filter((u) => u.role === 'trainer').length;
+    const trainees = users.length - trainers;
+    const learnerIds = new Set(progress.map((p) => p.uid).filter(Boolean));
+    const completions = progress.filter(isDone).length;
+    const ratingSum = feedback.reduce((s, f) => s + (f.rating || 0), 0);
+    const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    feedback.forEach((f) => { if (distribution[f.rating] !== undefined) distribution[f.rating] += 1; });
+    const audience = trainees || users.length;
+    return {
+      trainers,
+      trainees,
+      activeLearners: learnerIds.size,
+      engagement: users.length ? Math.round((learnerIds.size / users.length) * 100) : 0,
+      enrollments: progress.length,
+      completions,
+      completionRate: progress.length ? Math.round((completions / progress.length) * 100) : 0,
+      avgRating: feedback.length ? Math.round((ratingSum / feedback.length) * 10) / 10 : 0,
+      ratingCount: feedback.length,
+      distribution,
+      insights: buildMaterialInsights(materials, progress, feedback, audience),
+      leaderboard: buildLeaderboard(progress, users, 10),
+      materialCount: materials.length,
+    };
+  }, [data]);
 
-  const getEngagementRate = () => {
-    if (!progressStats || !userStats) return 0;
-    if (userStats.totalUsers === 0) return 0;
-    return Math.round((progressStats.activeUsers / userStats.totalUsers) * 100);
+  const exportCsv = () => {
+    if (!view) return;
+    const rows = [
+      ['Material', 'Category', 'Pages', 'Learners started', 'Completed', 'In progress', 'Completion rate %', 'Average progress %', 'Reach %', 'Average rating', 'Ratings', 'Last activity'],
+      ...view.insights.map((r) => [
+        r.name, r.category, r.pageCount, r.started, r.completed, r.inProgress, r.completionRate,
+        r.avgProgress, r.reach, r.ratingCount ? r.avgRating : '', r.ratingCount, r.lastActivity || '',
+      ]),
+    ];
+    downloadCsv(`revibe-material-insights-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+    toast.success('Material insights exported');
   };
-
-  const getCompletionRate = () => {
-    if (!progressStats) return 0;
-    if (progressStats.totalStarted === 0) return 0;
-    return Math.round((progressStats.completedMaterials / progressStats.totalStarted) * 100);
-  };
-
-  if (loading || !isTrainer) {
-    return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-white)' }}>
-        <i className="material-icons animate-spin" style={{ fontSize: '48px', color: 'var(--accent-pink)' }}>refresh</i>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-bg-white">
-      <Navbar title="Analytics Dashboard" />
-
-      <main className="analytics-content">
-        {/* Header */}
-        <div className="analytics-header">
-          <div>
-            <h1 className="analytics-title">Platform Analytics</h1>
-            <p className="analytics-subtitle">Comprehensive insights into learning and engagement</p>
+    <div className="app-shell">
+      <Navbar title="Analytics" />
+      <main className="page analytics">
+        <header className="page-header">
+          <div className="page-header-text">
+            <span className="eyebrow">Trainer insights</span>
+            <h1 className="page-title">Analytics</h1>
+            <p className="page-subtitle">See how every deck is landing: who started, who finished and what people think.</p>
           </div>
-          <button className="btn btn-outline" onClick={loadAnalytics} disabled={isLoading}>
-            <i className="material-icons">refresh</i>
-            Refresh Data
-          </button>
-        </div>
-
-        {isLoading ? (
-          <div className="analytics-loading">
-            <i className="material-icons animate-spin text-accent-pink" style={{ fontSize: '48px' }}>refresh</i>
-            <p>Loading analytics...</p>
+          <div className="page-header-actions">
+            <button className="btn btn-outline" onClick={handleRefresh} disabled={loading || refreshing}>
+              {refreshing ? <Spinner size="sm" /> : <i className="material-icons" aria-hidden="true">refresh</i>}
+              Refresh
+            </button>
+            <button className="btn btn-dark" onClick={exportCsv} disabled={!view || view.insights.length === 0}>
+              <i className="material-icons" aria-hidden="true">download</i>
+              Export CSV
+            </button>
           </div>
+        </header>
+
+        {loading ? (
+          <AnalyticsSkeleton />
+        ) : loadError || !view ? (
+          <EmptyState
+            icon="cloud_off"
+            title="We couldn't load analytics"
+            text="Check your connection and try again."
+            action={<button className="btn btn-gradient" onClick={handleRefresh}>Try again</button>}
+          />
         ) : (
           <>
-            {/* Key Metrics Grid */}
-            <div className="metrics-grid">
-              <div className="metric-card primary">
-                <div className="metric-icon">
-                  <i className="material-icons">people</i>
-                </div>
-                <div className="metric-content">
-                  <div className="metric-label">Total Users</div>
-                  <div className="metric-value">{userStats?.totalUsers || 0}</div>
-                  <div className="metric-detail">
-                    {userStats?.trainers || 0} trainers, {userStats?.trainees || 0} trainees
-                  </div>
-                </div>
-              </div>
-
-              <div className="metric-card success">
-                <div className="metric-icon">
-                  <i className="material-icons">trending_up</i>
-                </div>
-                <div className="metric-content">
-                  <div className="metric-label">Active Learners</div>
-                  <div className="metric-value">{progressStats?.activeUsers || 0}</div>
-                  <div className="metric-detail">
-                    {getEngagementRate()}% engagement rate
-                  </div>
-                </div>
-              </div>
-
-              <div className="metric-card info">
-                <div className="metric-icon">
-                  <i className="material-icons">menu_book</i>
-                </div>
-                <div className="metric-content">
-                  <div className="metric-label">Total Materials</div>
-                  <div className="metric-value">{materials.length}</div>
-                  <div className="metric-detail">
-                    {progressStats?.totalStarted || 0} total enrollments
-                  </div>
-                </div>
-              </div>
-
-              <div className="metric-card warning">
-                <div className="metric-icon">
-                  <i className="material-icons">check_circle</i>
-                </div>
-                <div className="metric-content">
-                  <div className="metric-label">Completions</div>
-                  <div className="metric-value">{progressStats?.completedMaterials || 0}</div>
-                  <div className="metric-detail">
-                    {getCompletionRate()}% completion rate
-                  </div>
-                </div>
-              </div>
-
-              <div className="metric-card purple">
-                <div className="metric-icon">
-                  <i className="material-icons">star</i>
-                </div>
-                <div className="metric-content">
-                  <div className="metric-label">Average Rating</div>
-                  <div className="metric-value">
-                    {feedbackStats?.averageRating?.toFixed(1) || '0.0'}
-                    <span className="metric-unit">/5</span>
-                  </div>
-                  <div className="metric-detail">
-                    {feedbackStats?.totalFeedback || 0} total ratings
-                  </div>
-                </div>
-              </div>
-
-              <div className="metric-card gradient">
-                <div className="metric-icon">
-                  <i className="material-icons">analytics</i>
-                </div>
-                <div className="metric-content">
-                  <div className="metric-label">Avg Completion</div>
-                  <div className="metric-value">
-                    {progressStats?.avgCompletionRate || 0}
-                    <span className="metric-unit">%</span>
-                  </div>
-                  <div className="metric-detail">
-                    across all materials
-                  </div>
-                </div>
-              </div>
+            <div className="an-stats stagger">
+              <StatTile
+                icon="groups"
+                label="Learners"
+                value={view.trainees}
+                meta={`${view.trainers} trainer${view.trainers === 1 ? '' : 's'} · ${view.materialCount} materials`}
+              />
+              <StatTile
+                icon="trending_up"
+                tone="pink"
+                label="Active learners"
+                value={view.activeLearners}
+                meta={`${view.engagement}% of the team has started`}
+              />
+              <StatTile
+                icon="task_alt"
+                tone="green"
+                label="Completions"
+                value={view.completions}
+                meta={`${view.completionRate}% of ${view.enrollments} enrolments`}
+              />
+              <StatTile
+                icon="star"
+                tone="orange"
+                label="Average rating"
+                value={view.ratingCount ? view.avgRating.toFixed(1) : '–'}
+                unit={view.ratingCount ? '/5' : undefined}
+                meta={`${view.ratingCount} rating${view.ratingCount === 1 ? '' : 's'}`}
+              />
             </div>
 
-            {/* Two Column Layout */}
-            <div className="analytics-two-column">
-              {/* Popular Materials */}
-              <div className="analytics-card">
-                <div className="analytics-card-header">
-                  <h2 className="analytics-card-title">
-                    <i className="material-icons">whatshot</i>
-                    Most Popular Materials
-                  </h2>
-                </div>
-                <div className="analytics-card-body">
-                  {progressStats?.popularMaterials && progressStats.popularMaterials.length > 0 ? (
-                    <div className="popular-materials-list">
-                      {progressStats.popularMaterials.map((material, index) => (
-                        <div key={material.materialId} className="popular-material-item">
-                          <div className="popular-rank">#{index + 1}</div>
-                          <div className="popular-info">
-                            <div className="popular-name">{material.materialName}</div>
-                            <div className="popular-stats">
-                              <i className="material-icons">people</i>
-                              {material.userCount} learners
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="empty-state-small">
-                      <i className="material-icons">inbox</i>
-                      <p>No engagement data yet</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+            <MaterialInsights rows={view.insights} />
 
-              {/* Top Rated Materials */}
-              <div className="analytics-card">
-                <div className="analytics-card-header">
-                  <h2 className="analytics-card-title">
-                    <i className="material-icons">star</i>
-                    Top Rated Materials
-                  </h2>
-                </div>
-                <div className="analytics-card-body">
-                  {feedbackStats?.topRatedMaterials && feedbackStats.topRatedMaterials.length > 0 ? (
-                    <div className="top-rated-list">
-                      {feedbackStats.topRatedMaterials.map((material, index) => (
-                        <div key={material.materialId} className="top-rated-item">
-                          <div className="top-rated-rank">#{index + 1}</div>
-                          <div className="top-rated-info">
-                            <div className="top-rated-name">{material.materialName}</div>
-                            <div className="top-rated-rating">
-                              <div className="stars-small">
-                                {[1, 2, 3, 4, 5].map(star => (
-                                  <i
-                                    key={star}
-                                    className="material-icons"
-                                    style={{
-                                      fontSize: '16px',
-                                      color: star <= Math.round(material.averageRating) ? '#FFB800' : '#CBD5E1'
-                                    }}
-                                  >
-                                    {star <= Math.round(material.averageRating) ? 'star' : 'star_border'}
-                                  </i>
-                                ))}
-                              </div>
-                              <span className="rating-text">{material.averageRating} ({material.ratingCount})</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="empty-state-small">
-                      <i className="material-icons">inbox</i>
-                      <p>No ratings yet</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+            <div className="an-grid an-grid-wide section">
+              <ActivityChart series={data.series} />
+              <RatingDistribution distribution={view.distribution} total={view.ratingCount} avg={view.avgRating} />
             </div>
 
-            {/* Rating Distribution */}
-            {feedbackStats?.ratingDistribution && (
-              <div className="analytics-card">
-                <div className="analytics-card-header">
-                  <h2 className="analytics-card-title">
-                    <i className="material-icons">bar_chart</i>
-                    Rating Distribution
-                  </h2>
-                </div>
-                <div className="analytics-card-body">
-                  <div className="rating-distribution">
-                    {[5, 4, 3, 2, 1].map(rating => {
-                      const count = feedbackStats.ratingDistribution[rating] || 0;
-                      const total = feedbackStats.totalFeedback || 1;
-                      const percentage = Math.round((count / total) * 100);
-                      
-                      return (
-                        <div key={rating} className="rating-row">
-                          <div className="rating-stars">
-                            {rating} <i className="material-icons">star</i>
-                          </div>
-                          <div className="rating-bar-container">
-                            <div 
-                              className="rating-bar-fill"
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                          <div className="rating-count">{count}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Leaderboard */}
-            <div className="analytics-card">
-              <div className="analytics-card-header">
-                <h2 className="analytics-card-title">
-                  <i className="material-icons">emoji_events</i>
-                  Top Learners
-                </h2>
-              </div>
-              <div className="analytics-card-body">
-                {leaderboard.length > 0 ? (
-                  <div className="leaderboard-list">
-                    {leaderboard.map((user, index) => (
-                      <div key={user.uid} className={`leaderboard-item ${index < 3 ? 'top-three' : ''}`}>
-                        <div className="leaderboard-rank">
-                          {index === 0 && <i className="material-icons gold">emoji_events</i>}
-                          {index === 1 && <i className="material-icons silver">emoji_events</i>}
-                          {index === 2 && <i className="material-icons bronze">emoji_events</i>}
-                          {index >= 3 && <span>#{index + 1}</span>}
-                        </div>
-                        <div className="leaderboard-avatar">
-                          {user.photoURL ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={user.photoURL} alt={user.displayName} />
-                          ) : (
-                            <div className="avatar-placeholder-small">
-                              <i className="material-icons">person</i>
-                            </div>
-                          )}
-                        </div>
-                        <div className="leaderboard-info">
-                          <div className="leaderboard-name">{user.displayName}</div>
-                          <div className="leaderboard-stats">
-                            <span className="leaderboard-stat">
-                              <i className="material-icons">check_circle</i>
-                              {user.completed} completed
-                            </span>
-                            <span className="leaderboard-stat">
-                              <i className="material-icons">schedule</i>
-                              {user.inProgress} in progress
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="empty-state-small">
-                    <i className="material-icons">inbox</i>
-                    <p>No learner activity yet</p>
-                  </div>
-                )}
-              </div>
+            <div className="an-grid section">
+              <Leaderboard rows={view.leaderboard} />
+              <FeedbackFeed feedback={data.feedback} />
             </div>
-
-            {/* Recent Feedback */}
-            {feedbackStats?.recentFeedback && feedbackStats.recentFeedback.length > 0 && (
-              <div className="analytics-card">
-                <div className="analytics-card-header">
-                  <h2 className="analytics-card-title">
-                    <i className="material-icons">chat</i>
-                    Trainee Feedback
-                    <span className="analytics-card-count">{feedbackStats.recentFeedback.length}</span>
-                  </h2>
-                </div>
-                <div className="analytics-card-body">
-                  <div className="feedback-list">
-                    {feedbackStats.recentFeedback.map((feedback) => (
-                      <div key={feedback.id} className="feedback-item">
-                        <div className="feedback-item-header">
-                          <div className="feedback-user">
-                            {feedback.userPhoto ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={feedback.userPhoto} alt={feedback.userName} className="feedback-avatar" />
-                            ) : (
-                              <div className="avatar-placeholder-tiny">
-                                <i className="material-icons">person</i>
-                              </div>
-                            )}
-                            <span className="feedback-user-name">{feedback.userName}</span>
-                          </div>
-                          <div className="feedback-rating-small">
-                            {[1, 2, 3, 4, 5].map(star => (
-                              <i
-                                key={star}
-                                className="material-icons"
-                                style={{
-                                  fontSize: '14px',
-                                  color: star <= feedback.rating ? '#FFB800' : '#CBD5E1'
-                                }}
-                              >
-                                {star <= feedback.rating ? 'star' : 'star_border'}
-                              </i>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="feedback-material-name">{feedback.materialName}</div>
-                        {feedback.comment && (
-                          <div className="feedback-comment">&ldquo;{feedback.comment}&rdquo;</div>
-                        )}
-                        {(feedback.updatedAt || feedback.createdAt) && (
-                          <div className="feedback-date">
-                            <i className="material-icons">schedule</i>
-                            {formatFeedbackDate(feedback.updatedAt || feedback.createdAt)}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
           </>
         )}
       </main>
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+function AnalyticsSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading analytics">
+      <div className="an-stats">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="stat-tile">
+            <Skeleton width={38} height={38} radius={12} />
+            <Skeleton width="45%" height={28} style={{ marginTop: 8 }} />
+            <Skeleton width="70%" height={12} />
+          </div>
+        ))}
+      </div>
+      <div className="panel section">
+        <div className="panel-head"><Skeleton width={180} height={18} /></div>
+        <div className="panel-body an-skel-rows">
+          {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} height={44} />)}
+        </div>
+      </div>
+      <div className="an-grid an-grid-wide section">
+        <div className="panel"><div className="panel-body"><Skeleton height={220} /></div></div>
+        <div className="panel"><div className="panel-body"><Skeleton height={220} /></div></div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+function attentionFlag(r) {
+  if (r.started === 0) return { tone: 'neutral', label: 'Not started yet' };
+  if (r.ratingCount >= 2 && r.avgRating < 3.5) return { tone: 'warning', label: 'Low rating' };
+  if (r.started >= 3 && r.completionRate < 50) return { tone: 'warning', label: 'Low completion' };
+  return null;
+}
+
+const MOBILE_SORTS = [
+  ['started:desc', 'Most learners'],
+  ['completionRate:desc', 'Highest completion'],
+  ['completionRate:asc', 'Lowest completion'],
+  ['avgRating:desc', 'Top rated'],
+  ['lastActivity:desc', 'Recent activity'],
+  ['name:asc', 'Name A–Z'],
+];
+
+function MaterialInsights({ rows }) {
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('all');
+  const [sort, setSort] = useState({ key: 'started', dir: 'desc' });
+
+  const categories = useMemo(() => [...new Set(rows.map((r) => r.category))].sort(), [rows]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const col = COLUMNS.find((c) => c.key === sort.key) || COLUMNS[1];
+    const factor = sort.dir === 'asc' ? 1 : -1;
+    return rows
+      .filter((r) => category === 'all' || r.category === category)
+      .filter((r) => !q || r.name.toLowerCase().includes(q) || r.category.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const av = a[col.key];
+        const bv = b[col.key];
+        let diff;
+        if (col.type === 'text') diff = String(av).localeCompare(String(bv));
+        else if (col.type === 'date') diff = String(av || '').localeCompare(String(bv || ''));
+        else diff = (av || 0) - (bv || 0);
+        return diff * factor || b.started - a.started || a.name.localeCompare(b.name);
+      });
+  }, [rows, query, category, sort]);
+
+  const toggleSort = (key) => {
+    setSort((s) => (s.key === key
+      ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: key === 'name' ? 'asc' : 'desc' }));
+  };
+
+  const sortValue = `${sort.key}:${sort.dir}`;
+  const sortLabel = COLUMNS.find((c) => c.key === sort.key)?.label.toLowerCase();
+
+  return (
+    <section className="panel section an-insights" aria-labelledby="insights-title">
+      <div className="panel-head an-insights-head">
+        <div>
+          <h2 id="insights-title" className="panel-title">
+            <i className="material-icons" aria-hidden="true">table_chart</i>
+            Material insights
+          </h2>
+          <p className="an-panel-sub">
+            {visible.length === rows.length ? `${rows.length}` : `${visible.length} of ${rows.length}`} material{rows.length === 1 ? '' : 's'} · sorted by {sortLabel}
+          </p>
+        </div>
+        <div className="an-toolbar">
+          <label className="search-field an-search">
+            <i className="material-icons" aria-hidden="true">search</i>
+            <span className="sr-only">Search materials</span>
+            <input
+              type="search"
+              placeholder="Search materials"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query && (
+              <button type="button" className="search-clear" onClick={() => setQuery('')} aria-label="Clear search">
+                <i className="material-icons" aria-hidden="true">close</i>
+              </button>
+            )}
+          </label>
+          {categories.length > 1 && (
+            <label className="an-select-wrap">
+              <span className="sr-only">Category</span>
+              <select className="select an-select" value={category} onChange={(e) => setCategory(e.target.value)}>
+                <option value="all">All categories</option>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+          )}
+          <label className="an-select-wrap an-sort-mobile">
+            <span className="sr-only">Sort by</span>
+            <select
+              className="select an-select"
+              value={MOBILE_SORTS.some(([v]) => v === sortValue) ? sortValue : ''}
+              onChange={(e) => {
+                const [key, dir] = e.target.value.split(':');
+                setSort({ key, dir });
+              }}
+            >
+              {!MOBILE_SORTS.some(([v]) => v === sortValue) && <option value="" disabled>Sort</option>}
+              {MOBILE_SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="panel-body">
+          <EmptyState icon="library_books" title="No materials yet" text="Upload a deck from the library and its insights will show up here." />
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="panel-body">
+          <EmptyState
+            icon="search_off"
+            title="No matching materials"
+            text="Try a different search or category."
+            action={<button className="btn btn-soft" onClick={() => { setQuery(''); setCategory('all'); }}>Clear filters</button>}
+          />
+        </div>
+      ) : (
+        <div className="an-table-wrap">
+          <table className="an-table">
+            <caption className="sr-only">Learner progress and ratings per material</caption>
+            <thead>
+              <tr>
+                {COLUMNS.map((c) => {
+                  const active = sort.key === c.key;
+                  return (
+                    <th
+                      key={c.key}
+                      scope="col"
+                      className={c.type === 'text' ? '' : 'num'}
+                      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <button type="button" className={`an-sort ${active ? 'active' : ''}`} onClick={() => toggleSort(c.key)}>
+                        {c.label}
+                        <i className="material-icons" aria-hidden="true">
+                          {active ? (sort.dir === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                        </i>
+                      </button>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => {
+                const flag = attentionFlag(r);
+                return (
+                  <tr key={r.id}>
+                    <td className="an-cell-material">
+                      <Link href={`/viewer?id=${encodeURIComponent(r.id)}`} className="an-material-link">
+                        {r.name}
+                      </Link>
+                      <span className="an-material-meta">
+                        <span className="badge badge-purple">{r.category}</span>
+                        {r.pageCount > 0 && <span>{r.pageCount} pages</span>}
+                        {flag && <span className={`badge badge-${flag.tone}`}>{flag.label}</span>}
+                      </span>
+                    </td>
+                    <td className="num" data-label="Learners">
+                      <span className="an-strong">{r.started}</span>
+                      <span className="an-sub">{r.reach}% reach</span>
+                    </td>
+                    <td className="num" data-label="Completed">
+                      <span className="an-strong">{r.completed}</span>
+                      <span className="an-sub">{r.inProgress} in progress</span>
+                    </td>
+                    <td className="num an-cell-rate" data-label="Completion rate">
+                      <div className="an-rate">
+                        <div
+                          className="progress-bar"
+                          role="progressbar"
+                          aria-valuenow={r.completionRate}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`${r.name} completion rate`}
+                        >
+                          <div className="progress-bar-fill" style={{ width: `${r.completionRate}%` }} />
+                        </div>
+                        <span className="an-strong">{r.started ? `${r.completionRate}%` : '–'}</span>
+                      </div>
+                    </td>
+                    <td className="num" data-label="Rating">
+                      {r.ratingCount ? (
+                        <span className="an-rating">
+                          <i className="material-icons" aria-hidden="true">star</i>
+                          <span className="an-strong">{r.avgRating.toFixed(1)}</span>
+                          <span className="an-sub">({r.ratingCount})</span>
+                        </span>
+                      ) : (
+                        <span className="an-sub">No ratings</span>
+                      )}
+                    </td>
+                    <td className="num" data-label="Last activity">
+                      <span className="an-muted" title={r.lastActivity ? formatDate(r.lastActivity) : undefined}>
+                        {r.lastActivity ? timeAgo(r.lastActivity) : 'No activity'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+function ActivityChart({ series }) {
+  const [active, setActive] = useState(null);
+  const max = Math.max(1, ...series.map((d) => Math.max(d.started, d.completed)));
+  const ceiling = max <= 4 ? max : Math.ceil(max / 2) * 2;
+  const totals = series.reduce(
+    (t, d) => ({ started: t.started + d.started, completed: t.completed + d.completed }),
+    { started: 0, completed: 0 },
+  );
+  const label = (d) => formatDate(d.date, { weekday: 'short', day: 'numeric', month: 'short' });
+  const current = active != null ? series[active] : null;
+  const empty = totals.started + totals.completed === 0;
+  const last = series.length - 1;
+
+  const onKeyDown = (e) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (step) {
+      e.preventDefault();
+      setActive((i) => Math.min(last, Math.max(0, (i == null ? last : i) + step)));
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      setActive(e.key === 'Home' ? 0 : last);
+    }
+  };
+
+  return (
+    <section className="panel" aria-labelledby="activity-title">
+      <div className="panel-head an-wrap-head">
+        <div>
+          <h2 id="activity-title" className="panel-title">
+            <i className="material-icons" aria-hidden="true">show_chart</i>
+            Learning activity
+          </h2>
+          <p className="an-panel-sub">Last {series.length} days · {totals.started} started, {totals.completed} completed</p>
+        </div>
+        <div className="an-legend" aria-hidden="true">
+          <span><i className="an-swatch started" />Started</span>
+          <span><i className="an-swatch completed" />Completed</span>
+        </div>
+      </div>
+      <div className="panel-body">
+        {empty ? (
+          <p className="an-empty-note">No one has started or finished a deck in the last {series.length} days.</p>
+        ) : (
+          <>
+            <div
+              className="an-chart"
+              tabIndex={0}
+              role="group"
+              aria-label="Daily starts and completions. Use the left and right arrow keys to read each day."
+              onKeyDown={onKeyDown}
+              onMouseLeave={() => setActive(null)}
+              onBlur={() => setActive(null)}
+            >
+              <div className="an-chart-grid" aria-hidden="true">
+                <span data-v={ceiling} />
+                <span data-v={ceiling > 1 ? Math.round(ceiling / 2) : ''} />
+                <span data-v={0} />
+              </div>
+              <div className="an-chart-cols" aria-hidden="true">
+                {series.map((d, i) => (
+                  <div
+                    key={d.date}
+                    className={`an-col ${active === i ? 'active' : ''}`}
+                    onMouseEnter={() => setActive(i)}
+                  >
+                    <div className="an-col-bars">
+                      <span className="an-bar started" style={{ height: `${(d.started / ceiling) * 100}%` }} />
+                      <span className="an-bar completed" style={{ height: `${(d.completed / ceiling) * 100}%` }} />
+                    </div>
+                    <span className={`an-col-label ${(last - i) % 2 ? 'alt' : ''}`}>
+                      {formatDate(d.date, { day: 'numeric' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {current && (
+                <div
+                  className={`an-tooltip ${active < 3 ? 'start' : active > last - 3 ? 'end' : ''}`}
+                  style={{ left: `${((active + 0.5) / series.length) * 100}%` }}
+                  aria-hidden="true"
+                >
+                  <strong>{label(current)}</strong>
+                  <span><i className="an-swatch started" />{current.started} started</span>
+                  <span><i className="an-swatch completed" />{current.completed} completed</span>
+                </div>
+              )}
+            </div>
+            <p className="sr-only" aria-live="polite">
+              {current ? `${label(current)}: ${current.started} started, ${current.completed} completed` : ''}
+            </p>
+            <table className="sr-only">
+              <caption>Daily learning activity</caption>
+              <thead><tr><th scope="col">Day</th><th scope="col">Started</th><th scope="col">Completed</th></tr></thead>
+              <tbody>
+                {series.map((d) => (
+                  <tr key={d.date}><th scope="row">{label(d)}</th><td>{d.started}</td><td>{d.completed}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+function RatingDistribution({ distribution, total, avg }) {
+  const top = Math.max(1, ...Object.values(distribution));
+  return (
+    <section className="panel" aria-labelledby="ratings-title">
+      <div className="panel-head">
+        <h2 id="ratings-title" className="panel-title">
+          <i className="material-icons" aria-hidden="true">star_rate</i>
+          Ratings
+        </h2>
+        {total > 0 && (
+          <span className="an-rating-head">
+            <span className="an-big">{avg.toFixed(1)}</span>
+            <Stars value={avg} size={15} />
+          </span>
+        )}
+      </div>
+      <div className="panel-body">
+        {total === 0 ? (
+          <p className="an-empty-note">No ratings yet. They appear once learners rate a deck.</p>
+        ) : (
+          <ul className="an-dist">
+            {[5, 4, 3, 2, 1].map((star) => {
+              const count = distribution[star] || 0;
+              const pct = Math.round((count / total) * 100);
+              return (
+                <li key={star} className="an-dist-row">
+                  <span className="an-dist-label">
+                    {star}
+                    <i className="material-icons" aria-hidden="true">star</i>
+                    <span className="sr-only"> star</span>
+                  </span>
+                  <span className="an-dist-track" aria-hidden="true">
+                    <span className="an-dist-fill" style={{ width: `${(count / top) * 100}%` }} />
+                  </span>
+                  <span className="an-dist-count">
+                    {count}
+                    <small>{pct}%</small>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {total > 0 && <p className="an-dist-foot">{total} rating{total === 1 ? '' : 's'} in total</p>}
+      </div>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+const MEDALS = ['gold', 'silver', 'bronze'];
+
+function Leaderboard({ rows }) {
+  return (
+    <section className="panel" aria-labelledby="leaders-title">
+      <div className="panel-head">
+        <h2 id="leaders-title" className="panel-title">
+          <i className="material-icons" aria-hidden="true">emoji_events</i>
+          Top learners
+        </h2>
+      </div>
+      <div className="panel-body">
+        {rows.length === 0 ? (
+          <p className="an-empty-note">No learner activity yet.</p>
+        ) : (
+          <ol className="an-leaders stagger">
+            {rows.map((u, i) => (
+              <li key={u.uid} className={`an-leader ${i < 3 ? 'podium' : ''}`}>
+                <span className={`an-rank ${MEDALS[i] || ''}`}>
+                  <span className="sr-only">Rank </span>
+                  {i < 3 ? <i className="material-icons" aria-hidden="true">military_tech</i> : null}
+                  <span className={i < 3 ? 'sr-only' : ''}>{i + 1}</span>
+                </span>
+                <Avatar src={u.photoURL} name={u.displayName} size={38} />
+                <span className="an-leader-text">
+                  <span className="an-leader-name">{u.displayName}</span>
+                  <span className="an-sub">{u.inProgress} in progress · {u.pagesViewed} pages read</span>
+                </span>
+                <span className="an-leader-score">
+                  <span className="an-strong">{u.completed}</span>
+                  <span className="an-sub">completed</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+const RATING_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: '5', label: '5' },
+  { key: '4', label: '4' },
+  { key: '3', label: '3' },
+  { key: 'low', label: '1–2' },
+];
+
+function FeedbackFeed({ feedback }) {
+  const [filter, setFilter] = useState('all');
+  const [limit, setLimit] = useState(FEEDBACK_PAGE);
+
+  const counts = useMemo(() => {
+    const c = { all: feedback.length, 5: 0, 4: 0, 3: 0, low: 0 };
+    feedback.forEach((f) => {
+      if (f.rating >= 3) c[f.rating] = (c[f.rating] || 0) + 1;
+      else c.low += 1;
+    });
+    return c;
+  }, [feedback]);
+
+  const filtered = useMemo(() => feedback.filter((f) => {
+    if (filter === 'all') return true;
+    if (filter === 'low') return f.rating <= 2;
+    return String(f.rating) === filter;
+  }), [feedback, filter]);
+
+  const shown = filtered.slice(0, limit);
+
+  return (
+    <section className="panel" aria-labelledby="feedback-title">
+      <div className="panel-head an-wrap-head">
+        <h2 id="feedback-title" className="panel-title">
+          <i className="material-icons" aria-hidden="true">forum</i>
+          Recent feedback
+        </h2>
+        <div className="segmented" role="group" aria-label="Filter feedback by rating">
+          {RATING_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              className={filter === f.key ? 'active' : ''}
+              aria-pressed={filter === f.key}
+              onClick={() => { setFilter(f.key); setLimit(FEEDBACK_PAGE); }}
+            >
+              {f.label}
+              {f.key !== 'all' && <i className="material-icons an-seg-star" aria-hidden="true">star</i>}
+              <span className="count">{counts[f.key] || 0}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="panel-body">
+        {filtered.length === 0 ? (
+          <p className="an-empty-note">
+            {feedback.length === 0 ? 'No feedback yet. Learners can rate a deck from the viewer.' : 'No feedback with this rating.'}
+          </p>
+        ) : (
+          <>
+            <ul className="an-feed">
+              {shown.map((f) => (
+                <li key={f.id} className="an-feed-item">
+                  <Avatar src={f.userPhoto} name={f.userName} size={36} />
+                  <div className="an-feed-body">
+                    <div className="an-feed-top">
+                      <span className="an-feed-name">{f.userName || 'Anonymous'}</span>
+                      <Stars value={f.rating} size={14} />
+                      <span className="an-sub an-feed-time">{timeAgo(f.updatedAt || f.createdAt)}</span>
+                    </div>
+                    <Link href={`/viewer?id=${encodeURIComponent(f.materialId)}`} className="an-feed-material">
+                      {f.materialName || 'Material'}
+                    </Link>
+                    {f.comment ? (
+                      <p className="an-feed-comment">{f.comment}</p>
+                    ) : (
+                      <p className="an-feed-comment none">Rated without a comment</p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {filtered.length > limit && (
+              <button type="button" className="btn btn-soft btn-sm an-more" onClick={() => setLimit((l) => l + FEEDBACK_PAGE)}>
+                Show more ({filtered.length - limit} left)
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </section>
   );
 }
