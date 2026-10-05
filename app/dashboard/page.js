@@ -9,7 +9,9 @@ import { getAllMaterials, deleteMaterial, updateMaterialDetails, updateMaterialT
 import { getUserProgress } from '@/lib/progress';
 import { generatePresentationThumbnail } from '@/lib/thumbnails';
 import Navbar from '@/components/Navbar';
-import UploadZone, { CategoryField, FormAlert, ModalShell } from '@/components/UploadZone';
+import UploadZone, { AudienceHint, CategoryField, FormAlert, ModalShell } from '@/components/UploadZone';
+import CategoryManager from '@/components/CategoryManager';
+import { getCategories, PARTNER_TYPES } from '@/lib/categories';
 import ProgressBar from '@/components/ProgressBar';
 import ReuploadModal from '@/components/ReuploadModal';
 import { EmptyState, RequireAuth, Spinner, StatTile, formatDate, greeting, timeAgo, useConfirm } from '@/components/ui';
@@ -52,7 +54,7 @@ export default function DashboardPage() {
    Library
    ========================================================================== */
 function Library() {
-  const { user, isTrainer } = useAuth();
+  const { user, isTrainer, isPartner, partnerType } = useAuth();
   const router = useRouter();
   const confirm = useConfirm();
   const searchRef = useRef(null);
@@ -73,15 +75,21 @@ function Library() {
   const [replacing, setReplacing] = useState(null);
   const [pageDrag, setPageDrag] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [categoryList, setCategoryList] = useState([]); // trainer: category docs with audiences
+  const [managingCategories, setManagingCategories] = useState(false);
 
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'there';
   const firstName = displayName.split(' ')[0];
 
   /* ---- Data ---- */
+  // Partners wait until they've picked seller / repair partner (PartnerTypePicker).
+  const waitingForPartnerType = isPartner && !partnerType;
+
   const loadMaterials = useCallback(async ({ silent = false } = {}) => {
+    if (waitingForPartnerType) return;
     if (!silent) setLoadState('loading');
     try {
-      const data = await getAllMaterials();
+      const data = await getAllMaterials(isPartner ? partnerType : null);
       setMaterials(data);
       setNow(Date.now());
       setLoadState('ready');
@@ -90,7 +98,21 @@ function Library() {
       setLoadState('error');
       toast.error("Couldn't load the library. Check your connection and try again.");
     }
+  }, [waitingForPartnerType, isPartner, partnerType]);
+
+  const loadCategories = useCallback(async () => {
+    try {
+      setCategoryList(await getCategories());
+    } catch (error) {
+      console.error('Failed to load categories', error);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!isTrainer) return undefined;
+    const id = requestAnimationFrame(() => loadCategories());
+    return () => cancelAnimationFrame(id);
+  }, [isTrainer, loadCategories]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => loadMaterials());
@@ -172,8 +194,14 @@ function Library() {
   );
 
   const allCategories = useMemo(
-    () => [...new Set(materials.map((m) => m.category || 'General'))].sort((a, b) => a.localeCompare(b)),
-    [materials],
+    () => [...new Set([...materials.map((m) => m.category || 'General'), ...categoryList.map((c) => c.name)])]
+      .sort((a, b) => a.localeCompare(b)),
+    [materials, categoryList],
+  );
+
+  const categoryAudiences = useMemo(
+    () => Object.fromEntries(categoryList.map((c) => [c.name, c.audiences || []])),
+    [categoryList],
   );
 
   const categoryChips = useMemo(() => {
@@ -386,6 +414,7 @@ function Library() {
                       onSelect: handleRefreshThumbnails,
                       disabled: refreshing || loading || materials.length === 0,
                     },
+                    { label: 'Manage categories', icon: 'label', onSelect: () => setManagingCategories(true) },
                     { label: 'Reload library', icon: 'refresh', onSelect: () => loadMaterials() },
                   ]}
                 />
@@ -643,6 +672,7 @@ function Library() {
           key={upload.id}
           initialFile={upload.file}
           categories={allCategories}
+          categoryAudiences={categoryAudiences}
           defaultCategory={category !== 'All' ? category : 'General'}
           onClose={() => setUpload(null)}
           onUploadComplete={(m) => {
@@ -656,8 +686,20 @@ function Library() {
         <EditDetailsModal
           material={editing}
           categories={allCategories}
+          categoryAudiences={categoryAudiences}
           onClose={() => setEditing(null)}
           onSaved={(patch) => handleDetailsSaved(editing.id, patch)}
+        />
+      )}
+
+      {managingCategories && (
+        <CategoryManager
+          categories={allCategories.map((name) => categoryList.find((c) => c.name === name) || { id: name, name, audiences: [] })}
+          onClose={() => setManagingCategories(false)}
+          onChanged={async () => {
+            await loadCategories();
+            await loadMaterials({ silent: true });
+          }}
         />
       )}
 
@@ -822,6 +864,7 @@ function MaterialCard({ material, progress, status, isNew, matchPage, isTrainer,
           <span title={formatDate(dateValue)}>
             {updated ? 'Updated' : 'Added'} {timeAgo(dateValue)}
           </span>
+          {isTrainer && <AudienceTags audiences={material.audiences} />}
           {matchPage && (
             <span className="lib-card-match">
               <i className="material-icons" aria-hidden="true">manage_search</i>
@@ -847,6 +890,23 @@ function MaterialCard({ material, progress, status, isNew, matchPage, isTrainer,
         </div>
       </div>
     </article>
+  );
+}
+
+function AudienceTags({ audiences = [] }) {
+  const partners = PARTNER_TYPES.filter((p) => audiences.includes(p.id));
+  return (
+    <span className="audience-tags" title="Who can see this besides Revibe">
+      {partners.length === 0 ? (
+        <span className="badge badge-neutral">
+          <i className="material-icons" aria-hidden="true">lock</i>Revibe only
+        </span>
+      ) : partners.map((p) => (
+        <span key={p.id} className="badge badge-purple">
+          <i className="material-icons" aria-hidden="true">{p.icon}</i>{p.label}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -919,7 +979,7 @@ function SkeletonGrid() {
   );
 }
 
-function EditDetailsModal({ material, categories, onClose, onSaved }) {
+function EditDetailsModal({ material, categories, categoryAudiences = {}, onClose, onSaved }) {
   const [name, setName] = useState(material.name || '');
   const [category, setCategory] = useState(material.category || 'General');
   const [saving, setSaving] = useState(false);
@@ -945,8 +1005,11 @@ function EditDetailsModal({ material, categories, onClose, onSaved }) {
     setSaving(true);
     setError('');
     try {
-      await updateMaterialDetails(material.id, { name: nextName, category: nextCategory });
-      const patch = { name: nextName, category: nextCategory };
+      // Visibility follows the category; keep the current audiences for categories
+      // that only exist on materials (no category doc yet).
+      const audiences = categoryAudiences[nextCategory] ?? (nextCategory === material.category ? material.audiences : []) ?? [];
+      await updateMaterialDetails(material.id, { name: nextName, category: nextCategory, audiences });
+      const patch = { name: nextName, category: nextCategory, audiences };
 
       // PowerPoint covers show the title and category, so redraw them.
       if (isPptx(material)) {
@@ -988,6 +1051,7 @@ function EditDetailsModal({ material, categories, onClose, onSaved }) {
           <div className="up-field">
             <label className="field-label" htmlFor={categoryId}>Category</label>
             <CategoryField id={categoryId} value={category} onChange={setCategory} categories={categories} disabled={saving} />
+            <AudienceHint audiences={categoryAudiences[category.trim()] ?? (category.trim() === material.category ? material.audiences : []) ?? []} />
           </div>
         </fieldset>
         <FormAlert>{error}</FormAlert>

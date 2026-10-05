@@ -7,6 +7,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { uploadMaterial, updateMaterialDetails, logMaterialUpdate } from '@/lib/materials';
+import { audienceSummary } from '@/lib/categories';
 import {
   ACCEPT_ATTR,
   describeUploadError,
@@ -287,10 +288,22 @@ export function CategoryField({ id, value, onChange, categories = [], disabled }
   );
 }
 
+/** Who will see a material in this category (partners only see tagged ones). */
+export function AudienceHint({ audiences = [] }) {
+  return (
+    <p className="field-hint">
+      <i className="material-icons" aria-hidden="true" style={{ fontSize: 14, verticalAlign: '-2px' }}>
+        {audiences.length ? 'groups' : 'lock'}
+      </i>{' '}
+      Visible to {audienceSummary(audiences)}. Manage this in Categories.
+    </p>
+  );
+}
+
 /* --------------------------------------------------------------------------
    Upload material modal (default export)
    -------------------------------------------------------------------------- */
-export default function UploadZone({ initialFile = null, categories = [], defaultCategory = 'General', onClose, onUploadComplete }) {
+export default function UploadZone({ initialFile = null, categories = [], categoryAudiences = {}, defaultCategory = 'General', onClose, onUploadComplete }) {
   const { user } = useAuth();
   const initialError = initialFile ? validateDeckFile(initialFile) : null;
   const [file, setFile] = useState(initialFile && !initialError ? initialFile : null);
@@ -324,6 +337,7 @@ export default function UploadZone({ initialFile = null, categories = [], defaul
     if (!file || busy) return;
     const finalName = name.trim() || displayNameFromFile(file.name);
     const finalCategory = category.trim() || 'General';
+    const audiences = categoryAudiences[finalCategory] || [];
 
     setError('');
     setPhase('extract');
@@ -334,7 +348,7 @@ export default function UploadZone({ initialFile = null, categories = [], defaul
       setProgress(0);
       const result = await uploadMaterial(
         file,
-        { category: finalCategory, pageCount, thumbnailURL, uploadedBy: user?.email || 'unknown', textContent },
+        { category: finalCategory, audiences, pageCount, thumbnailURL, uploadedBy: user?.email || 'unknown', textContent },
         (p) => setProgress(Math.round(p)),
       );
 
@@ -350,7 +364,7 @@ export default function UploadZone({ initialFile = null, categories = [], defaul
 
       // Notify all users that a new material was added (one-off banner next login).
       try {
-        await logMaterialUpdate(material.id, material.name, user?.displayName || user?.email || 'A trainer', 'added');
+        await logMaterialUpdate(material.id, material.name, user?.displayName || user?.email || 'A trainer', 'added', audiences);
       } catch (notifyErr) {
         console.warn('Could not log material-added notification:', notifyErr);
       }
@@ -411,6 +425,7 @@ export default function UploadZone({ initialFile = null, categories = [], defaul
               <div className="up-field">
                 <label className="field-label" htmlFor={categoryId}>Category</label>
                 <CategoryField id={categoryId} value={category} onChange={setCategory} categories={categories} disabled={busy} />
+                <AudienceHint audiences={categoryAudiences[category.trim()] || []} />
               </div>
             </fieldset>
 

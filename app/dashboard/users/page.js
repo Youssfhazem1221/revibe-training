@@ -9,8 +9,9 @@ import {
   RequireAuth, Skeleton, EmptyState, Avatar, StatTile, Spinner, useConfirm, timeAgo, formatDate,
 } from '@/components/ui';
 import {
-  getAllUsers, updateUserRole, getUserActivity, isAdminEmail, getPresence, describeRoleUpdateError,
+  getAllUsers, updateUserRole, updateUserPartnerType, getUserActivity, isAdminEmail, getPresence, describeRoleUpdateError,
 } from '@/lib/users';
+import { isRevibeEmail, partnerTypeLabel, PARTNER_TYPES } from '@/lib/categories';
 import { getUserProgress } from '@/lib/progress';
 import { getUserFeedback } from '@/lib/feedback';
 import './users.css';
@@ -201,11 +202,25 @@ function PeopleView() {
     }
   }, [confirm]);
 
+  const changePartnerType = useCallback(async (person, partnerType) => {
+    setUpdatingUid(person.uid);
+    try {
+      await updateUserPartnerType(person.uid, partnerType);
+      setPeople((p) => ({ ...p, users: p.users.map((u) => (u.uid === person.uid ? { ...u, partnerType } : u)) }));
+      toast.success(`${person.name} is now a ${partnerTypeLabel(partnerType)}`);
+    } catch (err) {
+      console.error('Error updating partner type:', err);
+      toast.error(`Couldn’t update the partner type. ${err?.message || ''}`, { duration: 7000 });
+    } finally {
+      setUpdatingUid(null);
+    }
+  }, []);
+
   const exportCsv = () => {
     const rows = [
-      ['Name', 'Email', 'Role', 'Status', 'Last active', 'Last login', 'Joined'],
+      ['Name', 'Email', 'Role', 'Department', 'Status', 'Last active', 'Last login', 'Joined'],
       ...visible.map((u) => [
-        u.name, u.email || '', u.isAdmin ? 'admin (trainer)' : (u.role || 'trainee'), STATUS_LABEL[u.presence],
+        u.name, u.email || '', u.isAdmin ? 'admin (trainer)' : (u.role || 'trainee'), departmentLabel(u), STATUS_LABEL[u.presence],
         u.lastActive || '', u.lastLogin || '', u.createdAt || '',
       ]),
     ];
@@ -442,6 +457,14 @@ function PeopleView() {
                 person.role === 'trainer'
                   ? { icon: 'arrow_downward', label: 'Change to trainee', danger: true, onSelect: () => changeRole(person, 'trainee') }
                   : { icon: 'arrow_upward', label: 'Promote to trainer', onSelect: () => changeRole(person, 'trainer') },
+                // Partners (non-Revibe trainees): switch seller <-> repair partner
+                ...(person.role !== 'trainer' && !isRevibeEmail(person.email)
+                  ? PARTNER_TYPES.filter((p) => p.id !== person.partnerType).map((p) => ({
+                    icon: p.icon,
+                    label: `Set as ${p.short.toLowerCase()}`,
+                    onSelect: () => { setMenu(null); changePartnerType(person, p.id); },
+                  }))
+                  : []),
               ]}
             />
           );
@@ -464,11 +487,27 @@ function PeopleView() {
 
 /* -------------------------------------------------------------------------- */
 
+/** Revibe staff vs. partner (seller / repair partner) for non-trainers. */
+function departmentLabel(person) {
+  if (person.role === 'trainer' || isRevibeEmail(person.email)) return 'Revibe';
+  return partnerTypeLabel(person.partnerType) || 'Partner (not chosen)';
+}
+
 function RoleBadges({ person }) {
+  const partner = person.role !== 'trainer' && !isRevibeEmail(person.email);
+  const partnerType = PARTNER_TYPES.find((p) => p.id === person.partnerType);
   return (
     <span className="pp-badges">
       {person.role === 'trainer' ? (
         <span className="badge badge-pink"><i className="material-icons" aria-hidden="true">school</i>Trainer</span>
+      ) : partner ? (
+        partnerType ? (
+          <span className="badge badge-purple"><i className="material-icons" aria-hidden="true">{partnerType.icon}</i>{partnerType.short}</span>
+        ) : (
+          <span className="badge badge-warning" title="Hasn’t picked seller or repair partner yet">
+            <i className="material-icons" aria-hidden="true">help_outline</i>Partner
+          </span>
+        )
       ) : (
         <span className="badge badge-purple"><i className="material-icons" aria-hidden="true">person</i>Trainee</span>
       )}

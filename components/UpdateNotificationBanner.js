@@ -46,7 +46,7 @@ function groupUpdates(updates) {
  * phones; never blocks the page. Seen IDs are stored per user (markUpdatesSeen).
  */
 export default function UpdateNotificationBanner() {
-  const { user } = useAuth();
+  const { user, isPartner, partnerType } = useAuth();
   const pathname = usePathname();
   const [loaded, setLoaded] = useState({ uid: null, items: [] });
   const [ready, setReady] = useState(false);
@@ -59,15 +59,16 @@ export default function UpdateNotificationBanner() {
   const show = !!uid && items.length > 0 && !quiet;
 
   useEffect(() => {
-    if (!uid) return;
+    // Partners wait until they've picked seller / repair partner
+    if (!uid || (isPartner && !partnerType)) return;
     let active = true;
-    getUnseenUpdates(uid)
+    getUnseenUpdates(uid, isPartner ? partnerType : null)
       .then((unseen) => {
         if (active) setLoaded({ uid, items: groupUpdates(unseen) });
       })
       .catch((err) => console.warn('Could not fetch update notifications:', err));
     return () => { active = false; };
-  }, [uid]);
+  }, [uid, isPartner, partnerType]);
 
   // Let the page settle before sliding in.
   useEffect(() => {
