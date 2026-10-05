@@ -3,6 +3,7 @@ import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { BadgeCelebrationProvider } from '@/components/BadgeCelebration';
 import UpdateNotificationBanner from '@/components/UpdateNotificationBanner';
+import PartnerTypePicker from '@/components/PartnerTypePicker';
 import AppToaster from '@/components/ui/AppToaster';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 
@@ -52,6 +53,7 @@ export default function RootLayout({ children }) {
         <AuthProvider>
           <ConfirmProvider>
             <BadgeCelebrationProvider>
+              <PartnerTypePicker />
               <UpdateNotificationBanner />
               {children}
               <AppToaster />

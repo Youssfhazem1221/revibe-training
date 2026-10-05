@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { isRevibeEmail } from '@/lib/categories';
 
 const AuthContext = createContext({});
 
@@ -19,6 +20,7 @@ const ADMIN_EMAIL = 'youssf.rehem@revibe.me';
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
+  const [partnerType, setPartnerType] = useState(null); // 'seller' | 'repair' for non-Revibe users
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,6 +33,8 @@ export function AuthProvider({ children }) {
       if (firebaseUser) {
         // Determine role from email first (always works, no network needed)
         let currentRole = 'trainee';
+        let currentPartnerType = null;
+        const userType = isRevibeEmail(firebaseUser.email) ? 'revibe' : 'partner';
         if (firebaseUser.email && firebaseUser.email.toLowerCase() === ADMIN_EMAIL) {
           currentRole = 'trainer';
         }
@@ -45,7 +49,8 @@ export function AuthProvider({ children }) {
               await setDoc(userRef, { role: 'trainer', lastLogin: new Date().toISOString() }, { merge: true });
             } else {
               currentRole = userDoc.data().role || currentRole;
-              await setDoc(userRef, { lastLogin: new Date().toISOString() }, { merge: true });
+              currentPartnerType = userDoc.data().partnerType || null;
+              await setDoc(userRef, { userType, lastLogin: new Date().toISOString() }, { merge: true });
             }
           } else {
             await setDoc(userRef, {
@@ -54,6 +59,7 @@ export function AuthProvider({ children }) {
               displayName: firebaseUser.displayName,
               photoURL: firebaseUser.photoURL,
               role: currentRole,
+              userType,
               createdAt: new Date().toISOString(),
               lastLogin: new Date().toISOString()
             });
@@ -65,9 +71,11 @@ export function AuthProvider({ children }) {
 
         setUser(firebaseUser);
         setRole(currentRole);
+        setPartnerType(currentPartnerType);
       } else {
         setUser(null);
         setRole(null);
+        setPartnerType(null);
       }
       setLoading(false);
     });
@@ -121,6 +129,15 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // One-time pick for partners; afterwards only a trainer can change it (enforced by rules).
+  const choosePartnerType = async (type) => {
+    await setDoc(doc(db, 'users', user.uid), {
+      partnerType: type,
+      partnerTypeSetAt: new Date().toISOString()
+    }, { merge: true });
+    setPartnerType(type);
+  };
+
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
@@ -131,7 +148,14 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, isTrainer: role === 'trainer', signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{
+      user, role, loading, partnerType,
+      isTrainer: role === 'trainer',
+      // Partners = anyone outside @revibe.me who isn't a trainer. They only see
+      // materials tagged for their partnerType.
+      isPartner: !!user && role !== 'trainer' && !isRevibeEmail(user.email),
+      choosePartnerType, signInWithGoogle, signOut
+    }}>
       {children}
     </AuthContext.Provider>
   );

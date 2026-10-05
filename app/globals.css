@@ -824,3 +824,44 @@ ul, ol { list-style: none; }
   font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--brand-purple);
 }
+
+/* ============================================
+   Partner department: category manager + partner picker
+   ============================================ */
+.cat-modal { max-width: 620px; }
+.cat-list { list-style: none; margin: 0 0 var(--space-5); padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.cat-row {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md, 12px);
+}
+.cat-row-name { font-weight: 600; color: var(--text-primary); }
+.cat-row-tags { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.cat-chip { display: inline-flex; align-items: center; gap: 4px; }
+.cat-chip .material-icons { font-size: 15px; }
+.cat-row-delete:hover { color: var(--color-danger); }
+.cat-add { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-4); border-top: 1px dashed var(--border-strong); }
+.cat-add-btn { margin-left: auto; }
+
+.partner-modal .modal-close { display: none; }
+.partner-options { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--space-2) 0 var(--space-3); }
+.partner-option {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  padding: var(--space-5) var(--space-3); border: 2px solid var(--border); border-radius: 16px;
+  background: var(--bg-white); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.partner-option:hover { border-color: var(--border-strong); }
+.partner-option .material-icons { font-size: 32px; color: var(--text-muted); }
+.partner-option.active { border-color: var(--accent-pink); background: var(--accent-pink-light); }
+.partner-option.active .material-icons { color: var(--accent-pink); }
+.partner-option-label { font-weight: 700; color: var(--text-primary); }
+.partner-option-desc { font-size: 12px; color: var(--text-muted); }
+.partner-hint { text-align: center; }
+.partner-continue { width: 100%; }
+
+/* Audience tags (who can see a material) */
+.audience-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.audience-tags .badge { font-size: 11px; }
+
+@media (max-width: 480px) {
+  .partner-options { grid-template-columns: 1fr; }
+}

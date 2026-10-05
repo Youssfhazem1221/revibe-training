@@ -308,3 +308,15 @@
   .pp-drawer-foot > .btn { flex: 1; }
   .pp-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
 }
+
+/* Department column */
+.dept-badge {
+  display: inline-flex; padding: 6px 12px; border-radius: 8px;
+  font-size: 12px; font-weight: 700;
+  background: rgba(124, 58, 237, 0.1); color: var(--accent-purple, #7c3aed);
+}
+.dept-select {
+  padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-light, #E5E7EB);
+  background: var(--bg-white); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.dept-select.is-unset { color: var(--text-muted); border-style: dashed; }
