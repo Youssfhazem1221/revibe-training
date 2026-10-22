@@ -86,6 +86,23 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Preview mode (no keys, no sign-in)
+
+```bash
+npm run dev:preview
+```
+
+Runs the whole site with sample decks, people, progress and feedback, without
+Firebase/Supabase keys or Google sign-in. Firebase and Supabase are swapped for
+in-memory stand-ins (`demo/`) on the dev server only; `npm run build` and
+production are unaffected. A floating **Preview** pill switches between the
+Trainer and Trainee views and resets the sample data.
+
+### Design system
+
+UI follows the revibe.me brand. See [DESIGN.md](DESIGN.md) for tokens,
+components (`components/ui/`) and rules.
+
 ### Build for production
 
 ```bash

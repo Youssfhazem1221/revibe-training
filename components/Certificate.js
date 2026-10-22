@@ -1,327 +1,409 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import toast from 'react-hot-toast';
+
+/** Circular "certified" seal, drawn in SVG so it prints crisply. */
+function Seal({ gradientId }) {
+  const ringId = `${gradientId}-ring`;
+  return (
+    <svg className="cert-seal" viewBox="0 0 120 120" role="img" aria-label="Revibe Training certified seal">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#C82D8C" />
+          <stop offset="0.55" stopColor="#7F19A0" />
+          <stop offset="1" stopColor="#5019A0" />
+        </linearGradient>
+        <path id={ringId} d="M60,60 m-43,0 a43,43 0 1,1 86,0 a43,43 0 1,1 -86,0" />
+      </defs>
+      <circle cx="60" cy="60" r="58" fill={`url(#${gradientId})`} />
+      <circle cx="60" cy="60" r="53" fill="none" stroke="#fff" strokeOpacity="0.45" strokeWidth="1" strokeDasharray="2 3" />
+      <text fill="#fff" fontSize="9.2" fontWeight="800" letterSpacing="2.6" fontFamily="Montserrat, Arial, sans-serif">
+        <textPath href={`#${ringId}`} startOffset="0">REVIBE TRAINING · CERTIFIED · REVIBE TRAINING · CERTIFIED ·</textPath>
+      </text>
+      <circle cx="60" cy="60" r="30" fill="#fff" />
+      <circle cx="60" cy="60" r="26" fill="none" stroke={`url(#${gradientId})`} strokeWidth="2" />
+      <path
+        d="M47.5 61.5 l8 8 l17-18"
+        fill="none"
+        stroke={`url(#${gradientId})`}
+        strokeWidth="6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 /**
- * Certificate - Downloadable completion certificate
+ * Certificate: premium, print-friendly completion certificate in a modal.
+ * "Download PDF" / "Print" open the browser print dialog; @media print rules
+ * make only the certificate print, on one landscape A4 page.
  */
 export default function Certificate({ certificateData, onClose }) {
-  const certificateRef = useRef(null);
+  const closeRef = useRef(null);
+  const rawId = useId();
+  const gradientId = `cert-grad-${rawId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
-  const handleDownload = () => {
-    // In a production app, you'd use html2canvas or similar to generate a PDF
-    // For now, we'll trigger a print dialog
-    window.print();
-  };
+  // Focus, Esc to close, scroll lock, focus restore.
+  useEffect(() => {
+    if (!certificateData) return undefined;
+    const previouslyFocused = document.activeElement;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+      if (previouslyFocused && typeof previouslyFocused.focus === 'function') previouslyFocused.focus();
+    };
+  }, [certificateData, onClose]);
 
-  if (!certificateData) return null;
+  if (!certificateData || typeof document === 'undefined') return null;
 
   const { userName, materialName, completedAt, certificateId, issuedBy } = certificateData;
 
-  return (
-    <div className="certificate-overlay">
-      <div className="certificate-modal">
-        <div className="certificate-container" ref={certificateRef}>
-          <div className="certificate-border">
-            <div className="certificate-content">
-              {/* Header */}
-              <div className="certificate-header">
-                <div className="certificate-logo">
-                  <span className="logo-text">REVIBE</span>
-                </div>
-                <h1 className="certificate-title">Certificate of Completion</h1>
-                <div className="certificate-divider" />
-              </div>
+  const handlePrint = () => {
+    try {
+      // The print dialog uses the page title as the default PDF file name.
+      const previousTitle = document.title;
+      document.title = `Revibe certificate - ${materialName}`;
+      const restore = () => {
+        document.title = previousTitle;
+        window.removeEventListener('afterprint', restore);
+      };
+      window.addEventListener('afterprint', restore);
+      window.print();
+    } catch (error) {
+      console.error('Print failed:', error);
+      toast.error("Couldn't open the print dialog. Try your browser's Print menu instead.");
+    }
+  };
 
-              {/* Body */}
-              <div className="certificate-body">
-                <p className="certificate-text">This is to certify that</p>
-                <h2 className="certificate-name">{userName}</h2>
-                <p className="certificate-text">has successfully completed</p>
-                <h3 className="certificate-course">{materialName}</h3>
-                <p className="certificate-date">on {completedAt}</p>
-              </div>
-
-              {/* Footer */}
-              <div className="certificate-footer">
-                <div className="certificate-signature-section">
-                  <div className="certificate-signature-line" />
-                  <p className="certificate-signature-label">Authorized Signature</p>
-                  <p className="certificate-issuer">{issuedBy}</p>
-                </div>
-
-                <div className="certificate-seal">
-                  <div className="seal-circle">
-                    <i className="material-icons">verified</i>
-                  </div>
-                  <p className="seal-text">Official Certificate</p>
-                </div>
-              </div>
-
-              {/* Certificate ID */}
-              <div className="certificate-id">
-                Certificate ID: {certificateId}
-              </div>
+  return createPortal(
+    <div className="cert-portal">
+      <div
+        className="cert-backdrop"
+        onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
+      >
+        <div className="cert-dialog" role="dialog" aria-modal="true" aria-labelledby="cert-dialog-title">
+          <div className="cert-toolbar">
+            <div className="cert-toolbar-text">
+              <span className="eyebrow">Well earned</span>
+              <h2 id="cert-dialog-title" className="cert-toolbar-title">Your certificate</h2>
+            </div>
+            <div className="cert-toolbar-actions">
+              <button type="button" className="btn btn-outline btn-sm cert-print-btn" onClick={handlePrint}>
+                <i className="material-icons" aria-hidden="true">print</i>
+                <span>Print</span>
+              </button>
+              <button type="button" className="btn btn-gradient btn-sm" onClick={handlePrint}>
+                <i className="material-icons" aria-hidden="true">download</i>
+                <span>Download PDF</span>
+              </button>
+              <button ref={closeRef} type="button" className="modal-close" onClick={onClose} aria-label="Close certificate">
+                <i className="material-icons">close</i>
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* Actions */}
-        <div className="certificate-actions">
-          <button className="btn btn-ghost" onClick={onClose}>
-            Close
-          </button>
-          <button className="btn btn-gradient" onClick={handleDownload}>
-            <i className="material-icons">download</i>
-            Download / Print
-          </button>
+          <article className="cert-sheet" aria-label={`Certificate of completion for ${userName}`}>
+            <div className="cert-inner">
+              <span className="cert-blob cert-blob-a" aria-hidden="true" />
+              <span className="cert-blob cert-blob-b" aria-hidden="true" />
+              <span className="cert-rule" aria-hidden="true" />
+
+              <header className="cert-head">
+                <span className="cert-wordmark">
+                  <span className="cert-wordmark-logo">REVIBE</span>
+                  <span className="cert-wordmark-product">Training</span>
+                </span>
+                <span className="cert-kicker">Certificate of completion</span>
+              </header>
+
+              <div className="cert-main">
+                <p className="cert-lead">This certifies that</p>
+                <p className="cert-name">{userName}</p>
+                <span className="cert-underline" aria-hidden="true" />
+                <p className="cert-lead">has successfully completed the training</p>
+                <p className="cert-course">{materialName}</p>
+              </div>
+
+              <footer className="cert-foot">
+                <div className="cert-foot-col">
+                  <span className="cert-foot-value">{completedAt}</span>
+                  <span className="cert-foot-label">Date completed</span>
+                </div>
+                <Seal gradientId={gradientId} />
+                <div className="cert-foot-col cert-foot-right">
+                  <span className="cert-signature">Revibe Training Team</span>
+                  <span className="cert-foot-label">{issuedBy || 'Revibe Training Hub'}</span>
+                </div>
+              </footer>
+
+              {certificateId && (
+                <p className="cert-id">
+                  Certificate ID <span>{certificateId}</span>
+                </p>
+              )}
+            </div>
+          </article>
+
+          <p className="cert-hint">
+            <i className="material-icons" aria-hidden="true">info</i>
+            To download, choose &ldquo;Save as PDF&rdquo; in the print dialog. It prints on one landscape A4 page.
+          </p>
         </div>
       </div>
 
-      <style jsx>{`
-        .certificate-overlay {
+      <style jsx global>{`
+        .cert-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(0, 0, 0, 0.8);
-          backdrop-filter: blur(4px);
+          z-index: calc(var(--z-modal) + 5);
+          display: flex;
+          align-items: flex-start;
+          justify-content: center;
+          padding: var(--space-8) var(--space-4);
+          overflow-y: auto;
+          background: rgba(18, 18, 18, 0.6);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          animation: fadeIn 220ms var(--ease-out) both;
+        }
+        .cert-dialog {
+          width: 100%;
+          max-width: 980px;
+          margin: auto 0;
+          padding: var(--space-5);
+          background: var(--bg-white);
+          border-radius: var(--radius-2xl);
+          box-shadow: var(--shadow-xl);
+          animation: scaleIn 320ms var(--ease-out) both;
+        }
+        .cert-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-3);
+          padding: 0 var(--space-1) var(--space-4);
+        }
+        .cert-toolbar-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .cert-toolbar-title {
+          font-family: var(--font-heading);
+          font-size: 20px;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+          color: var(--text-primary);
+        }
+        .cert-toolbar-actions { display: flex; align-items: center; gap: var(--space-2); }
+        .cert-hint {
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 1000;
-          padding: 20px;
-          overflow-y: auto;
+          gap: 6px;
+          margin-top: var(--space-4);
+          font-size: 12.5px;
+          color: var(--text-muted);
+          text-align: center;
+        }
+        .cert-hint .material-icons { font-size: 16px; color: var(--brand-purple); }
+
+        /* ---------- The certificate itself (sizes scale with its width) ---------- */
+        .cert-sheet {
+          container-type: inline-size;
+          position: relative;
+          width: 100%;
+          aspect-ratio: 297 / 210;
+          /* % padding resolves against the parent width (= sheet width). */
+          padding: 1.1%;
+          background: linear-gradient(135deg, #C82D8C 0%, #7F19A0 55%, #5019A0 100%);
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-md);
+          font-family: var(--font-heading);
+          color: #121212;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .cert-inner {
+          position: relative;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 4.4cqw 6.5cqw 2.6cqw;
+          background: #fff;
+          border-radius: 0.6cqw;
+          overflow: hidden;
+          text-align: center;
+        }
+        .cert-rule {
+          position: absolute;
+          inset: 1.5cqw;
+          border: 0.12cqw solid #E4D9F2;
+          border-radius: 0.4cqw;
+          pointer-events: none;
+        }
+        .cert-blob {
+          position: absolute;
+          border-radius: 999px;
+          pointer-events: none;
+        }
+        .cert-blob-a {
+          width: 34cqw; height: 34cqw; top: -17cqw; right: -12cqw;
+          background: radial-gradient(circle, rgba(200, 45, 140, 0.13), rgba(200, 45, 140, 0) 70%);
+        }
+        .cert-blob-b {
+          width: 40cqw; height: 40cqw; bottom: -22cqw; left: -14cqw;
+          background: radial-gradient(circle, rgba(80, 25, 160, 0.12), rgba(80, 25, 160, 0) 70%);
         }
 
-        .certificate-modal {
-          max-width: 900px;
+        .cert-head { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1.4cqw; }
+        .cert-wordmark { display: inline-flex; align-items: baseline; gap: 0.9cqw; line-height: 1; }
+        .cert-wordmark-logo { font-size: 3cqw; font-weight: 900; letter-spacing: 0.06em; color: #121212; }
+        .cert-wordmark-product {
+          font-size: 1.05cqw; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #7F19A0;
+        }
+        .cert-kicker {
+          display: inline-block;
+          padding: 0.6cqw 1.8cqw;
+          font-size: 1.15cqw;
+          font-weight: 700;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: #7F19A0;
+          background: #F1ECF9;
+          border-radius: 999px;
+        }
+
+        .cert-main {
+          position: relative;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 0.9cqw;
           width: 100%;
         }
-
-        .certificate-container {
-          background: white;
-          padding: 40px;
-          border-radius: 8px;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        .cert-lead { font-size: 1.55cqw; font-weight: 500; color: #6C6C6C; }
+        .cert-name {
+          max-width: 100%;
+          font-size: 5.6cqw;
+          font-weight: 800;
+          letter-spacing: -0.035em;
+          line-height: 1.1;
+          color: #121212;
+          overflow-wrap: anywhere;
         }
-
-        .certificate-border {
-          border: 8px double #D4AF37;
-          padding: 40px;
-          background: linear-gradient(135deg, #FDFBF7 0%, #FFFFFF 100%);
+        .cert-underline {
+          display: block;
+          width: 16cqw;
+          height: 0.45cqw;
+          margin: 0.3cqw 0 0.9cqw;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #C82D8C, #7F19A0);
         }
-
-        .certificate-content {
-          text-align: center;
-        }
-
-        /* Header */
-        .certificate-header {
-          margin-bottom: 40px;
-        }
-
-        .certificate-logo {
-          margin-bottom: 16px;
-        }
-
-        .logo-text {
-          font-size: 36px;
-          font-weight: 900;
-          font-family: 'Poppins', sans-serif;
-          background: var(--gradient-hero);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          letter-spacing: 2px;
-        }
-
-        .certificate-title {
-          font-size: 42px;
+        .cert-course {
+          max-width: 80%;
+          font-size: 2.7cqw;
           font-weight: 700;
-          color: #1A1A1A;
-          font-family: 'Poppins', sans-serif;
-          margin: 0;
-          letter-spacing: 1px;
+          letter-spacing: -0.02em;
+          line-height: 1.2;
+          color: #7F19A0;
         }
 
-        .certificate-divider {
-          width: 200px;
-          height: 3px;
-          background: var(--gradient-hero);
-          margin: 20px auto;
+        .cert-foot {
+          position: relative;
+          width: 100%;
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          align-items: end;
+          gap: 3cqw;
         }
-
-        /* Body */
-        .certificate-body {
-          margin: 40px 0;
-        }
-
-        .certificate-text {
-          font-size: 18px;
-          color: #666;
-          margin: 12px 0;
-          font-style: italic;
-        }
-
-        .certificate-name {
-          font-size: 48px;
-          font-weight: 700;
-          color: var(--accent-pink);
-          font-family: 'Poppins', sans-serif;
-          margin: 24px 0;
-          text-transform: uppercase;
-          letter-spacing: 2px;
-        }
-
-        .certificate-course {
-          font-size: 32px;
-          font-weight: 600;
-          color: var(--accent-purple);
-          font-family: 'Poppins', sans-serif;
-          margin: 24px 0;
-        }
-
-        .certificate-date {
-          font-size: 16px;
-          color: #888;
-          margin-top: 16px;
-        }
-
-        /* Footer */
-        .certificate-footer {
+        .cert-foot-col {
           display: flex;
-          justify-content: space-between;
-          align-items: flex-end;
-          margin-top: 60px;
-          padding-top: 40px;
-          border-top: 2px solid #E5E7EB;
-        }
-
-        .certificate-signature-section {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.6cqw;
+          padding-top: 0.9cqw;
+          border-top: 0.12cqw solid #DCD5E6;
           text-align: left;
         }
-
-        .certificate-signature-line {
-          width: 250px;
-          height: 2px;
-          background: #333;
-          margin-bottom: 8px;
+        .cert-foot-right { align-items: flex-end; text-align: right; }
+        .cert-foot-value { font-size: 1.6cqw; font-weight: 700; color: #121212; }
+        .cert-signature { font-size: 1.6cqw; font-weight: 800; font-style: italic; letter-spacing: -0.01em; color: #121212; }
+        .cert-foot-label {
+          font-size: 0.95cqw; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #969696;
         }
+        .cert-seal { width: 10.5cqw; height: 10.5cqw; margin-bottom: -0.4cqw; filter: drop-shadow(0 0.5cqw 1cqw rgba(127, 25, 160, 0.25)); }
 
-        .certificate-signature-label {
-          font-size: 12px;
-          color: #666;
-          margin: 4px 0;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-        }
-
-        .certificate-issuer {
-          font-size: 14px;
+        .cert-id {
+          position: relative;
+          margin-top: 1.6cqw;
+          font-size: 0.95cqw;
           font-weight: 600;
-          color: #333;
-          margin: 0;
-        }
-
-        .certificate-seal {
-          text-align: center;
-        }
-
-        .seal-circle {
-          width: 80px;
-          height: 80px;
-          border-radius: 50%;
-          background: var(--gradient-hero);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0 auto 8px;
-          box-shadow: 0 4px 12px rgba(255, 46, 99, 0.3);
-        }
-
-        .seal-circle i {
-          font-size: 48px;
-          color: white;
-        }
-
-        .seal-text {
-          font-size: 11px;
-          color: #666;
-          margin: 0;
+          letter-spacing: 0.12em;
           text-transform: uppercase;
-          letter-spacing: 1px;
-          font-weight: 600;
+          color: #969696;
+        }
+        .cert-id span { font-family: var(--font-mono); letter-spacing: 0.04em; color: #6C6C6C; margin-left: 0.5cqw; }
+
+        @media (max-width: 640px) {
+          .cert-backdrop { padding: var(--space-3) var(--space-2); align-items: center; }
+          .cert-dialog { padding: var(--space-4) var(--space-3); border-radius: var(--radius-xl); }
+          .cert-toolbar { flex-wrap: wrap; }
+          .cert-toolbar-title { font-size: 17px; }
+          .cert-toolbar-actions { width: 100%; }
+          .cert-toolbar-actions .btn { flex: 1; }
+          .cert-toolbar-actions .modal-close { position: absolute; top: 12px; right: 12px; }
+          .cert-dialog { position: relative; }
+          .cert-print-btn { display: none; }
         }
 
-        .certificate-id {
-          margin-top: 40px;
-          font-size: 11px;
-          color: #999;
-          font-family: 'JetBrains Mono', monospace;
-          letter-spacing: 1px;
-        }
-
-        /* Actions */
-        .certificate-actions {
-          display: flex;
-          gap: 12px;
-          justify-content: center;
-          margin-top: 24px;
-        }
-
-        .certificate-actions .btn {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        /* Print styles */
+        /* ---------- Print: only the certificate, landscape A4 ---------- */
         @media print {
-          .certificate-overlay {
+          @page { size: A4 landscape; margin: 0; }
+          html, body { background: #fff !important; overflow: visible !important; }
+          body > *:not(.cert-portal) { display: none !important; }
+          .cert-portal { display: block !important; }
+          .cert-backdrop {
             position: static;
-            background: white;
+            display: block;
+            padding: 0;
+            overflow: visible;
+            background: none;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            animation: none;
           }
-
-          .certificate-actions {
-            display: none;
-          }
-
-          .certificate-container {
+          .cert-dialog {
+            max-width: none;
+            padding: 0;
+            margin: 0;
+            border-radius: 0;
             box-shadow: none;
+            animation: none;
           }
-        }
-
-        @media (max-width: 768px) {
-          .certificate-container {
-            padding: 20px;
+          .cert-toolbar, .cert-hint { display: none !important; }
+          .cert-sheet {
+            width: 297mm;
+            height: 209mm;
+            aspect-ratio: auto;
+            border-radius: 0;
+            box-shadow: none;
+            break-inside: avoid;
+            page-break-inside: avoid;
           }
-
-          .certificate-border {
-            padding: 20px;
-          }
-
-          .certificate-title {
-            font-size: 32px;
-          }
-
-          .certificate-name {
-            font-size: 36px;
-          }
-
-          .certificate-course {
-            font-size: 24px;
-          }
-
-          .certificate-footer {
-            flex-direction: column;
-            gap: 32px;
-            align-items: center;
-          }
-
-          .certificate-signature-section {
-            text-align: center;
-          }
+          .cert-inner { border-radius: 0; }
         }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 }

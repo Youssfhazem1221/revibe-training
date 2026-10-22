@@ -1,92 +1,96 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { getMaterial } from '@/lib/materials';
+import { EmptyState, PageLoader, RequireAuth } from '@/components/ui';
 import PDFEditor from '@/components/PDFEditor';
 import './editor.css';
 
 function EditorContent() {
-  const searchParams = useSearchParams();
-  const materialId = searchParams.get('id');
-  const { user, isTrainer, loading } = useAuth();
-  const router = useRouter();
-  
-  const [material, setMaterial] = useState(null);
-  const [error, setError] = useState('');
+  const materialId = useSearchParams().get('id');
+  // { status: 'loading' | 'ready' | 'missing' | 'error', material?: object }
+  const [state, setState] = useState({ status: 'loading' });
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    // Only trainers can access the editor
-    if (!loading && (!user || !isTrainer)) {
-      router.push('/dashboard');
-    }
-  }, [user, isTrainer, loading, router]);
-
-  useEffect(() => {
-    if (!materialId || loading || !user) return;
-
+    if (!materialId) return;
     let cancelled = false;
-    const fetchMaterial = async () => {
-      try {
-        const docRef = doc(db, 'materials', materialId);
-        const docSnap = await getDoc(docRef);
-        
-        if (cancelled) return;
-        if (docSnap.exists()) {
-          setMaterial(docSnap.data());
-        } else {
-          setError('Material not found');
-        }
-      } catch (err) {
-        if (cancelled) return;
+    getMaterial(materialId)
+      .then((material) => {
+        if (!cancelled) setState(material ? { status: 'ready', material } : { status: 'missing' });
+      })
+      .catch((err) => {
         console.error('Error fetching material', err);
-        setError('Failed to load document details');
-      }
-    };
-
-    fetchMaterial();
+        if (!cancelled) setState({ status: 'error' });
+      });
     return () => { cancelled = true; };
-  }, [materialId, user, loading]);
+  }, [materialId, attempt]);
 
-  if (loading || !user || !isTrainer) return null;
-  
-  if (error) {
+  const backToLibrary = (
+    <Link href="/dashboard" className="btn btn-gradient">
+      <i className="material-icons">auto_stories</i> Back to library
+    </Link>
+  );
+
+  if (!materialId || state.status === 'missing') {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-bg-soft">
-        <i className="material-icons text-color-danger text-display mb-4">error_outline</i>
-        <h2 className="text-h2 font-poppins text-primary mb-2">Oops!</h2>
-        <p className="text-body text-muted mb-6">{error}</p>
-        <button className="btn btn-gradient" onClick={() => router.push('/dashboard')}>
-          Back to Dashboard
-        </button>
-      </div>
+      <main className="editor-state">
+        <title>Material not found · Revibe Training</title>
+        <EmptyState
+          icon="search_off"
+          title="We couldn’t find that material"
+          text="It may have been removed or the link is out of date."
+          action={backToLibrary}
+        />
+      </main>
     );
   }
 
-  if (!material) {
+  if (state.status === 'error') {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-bg-soft">
-        <i className="material-icons animate-spin text-accent-pink" style={{fontSize: '48px'}}>refresh</i>
-        <p className="mt-4 font-medium text-muted">Preparing experimental editor...</p>
-      </div>
+      <main className="editor-state">
+        <title>Editor · Revibe Training</title>
+        <EmptyState
+          icon="cloud_off"
+          title="The editor didn’t load"
+          text="Check your connection and try again."
+          action={
+            <div className="editor-state-actions">
+              <button className="btn btn-gradient" onClick={() => { setState({ status: 'loading' }); setAttempt((n) => n + 1); }}>
+                <i className="material-icons">refresh</i> Try again
+              </button>
+              <Link href="/dashboard" className="btn btn-outline">Back to library</Link>
+            </div>
+          }
+        />
+      </main>
     );
   }
 
+  if (state.status === 'loading') return <PageLoader label="Opening editor" />;
+
+  const { material } = state;
   return (
-    <PDFEditor 
-      url={material.downloadURL} 
-      title={material.name} 
-      materialId={material.id} 
-    />
+    <>
+      <title>{`Edit: ${material.name} · Revibe Training`}</title>
+      <PDFEditor
+        url={material.downloadURL}
+        title={material.name}
+        category={material.category}
+        materialId={material.id || materialId}
+      />
+    </>
   );
 }
 
 export default function EditorPage() {
   return (
-    <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
-      <EditorContent />
-    </Suspense>
+    <RequireAuth role="trainer">
+      <Suspense fallback={<PageLoader label="Opening editor" />}>
+        <EditorContent />
+      </Suspense>
+    </RequireAuth>
   );
 }

@@ -23,6 +23,25 @@ service cloud.firestore {
       return isTrainer() || isOwner(uid);
     }
 
+    // Revibe staff (care / management) — any @revibe.me account.
+    function isRevibe() {
+      return isSignedIn() &&
+             request.auth.token.email is string &&
+             request.auth.token.email.lower().matches('.*@revibe[.]me$');
+    }
+
+    // Partner type ('seller' / 'repair') picked by a non-Revibe user.
+    function myPartnerType() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('partnerType', '');
+    }
+
+    // Trainers and Revibe staff see everything; partners only see docs
+    // whose `audiences` include their partner type.
+    function canSeeAudiences(data) {
+      return isTrainer() || isRevibe() ||
+             (isSignedIn() && myPartnerType() in data.get('audiences', []));
+    }
+
     // ============================================
     // Users Collection
     // ============================================
@@ -30,16 +49,25 @@ service cloud.firestore {
       // Anyone authenticated can read user profiles
       allow read: if isSignedIn();
       
-      // Users can create their own profile
-      allow create: if isOwner(userId) && 
-                       request.resource.data.uid == userId;
+      // Users can create their own profile — never as a trainer (except the
+      // admin), and partnerType, if set, must be valid.
+      allow create: if isOwner(userId) &&
+                       request.resource.data.uid == userId &&
+                       (request.resource.data.get('role', 'trainee') == 'trainee' ||
+                        request.auth.token.email == 'youssf.rehem@revibe.me') &&
+                       request.resource.data.get('partnerType', 'seller') in ['seller', 'repair'];
       
       // Trainers can update any user's profile (including role/promotions).
       // Owners can update their own profile but NOT their own role.
+      // Partners may set partnerType once (when unset); after that only a
+      // trainer can change it.
       // Explicit parentheses so precedence is unambiguous.
       allow update: if isTrainer() ||
                        (isOwner(userId) &&
-                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) &&
+                        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['partnerType']) ||
+                         (resource.data.get('partnerType', null) == null &&
+                          request.resource.data.partnerType in ['seller', 'repair'])));
       
       // Only trainers can delete users
       allow delete: if isTrainer();
@@ -49,10 +77,18 @@ service cloud.firestore {
     // Materials Collection
     // ============================================
     match /materials/{materialId} {
-      // Everyone authenticated can read materials
-      allow read: if isSignedIn();
+      // Revibe staff + trainers read all; partners only materials tagged for them
+      allow read: if canSeeAudiences(resource.data);
       
       // Only trainers can create, update, or delete materials
+      allow create, update, delete: if isTrainer();
+    }
+
+    // ============================================
+    // Categories (name + partner audiences)
+    // ============================================
+    match /categories/{categoryId} {
+      allow read: if isSignedIn();
       allow create, update, delete: if isTrainer();
     }
 
@@ -135,8 +171,8 @@ service cloud.firestore {
     // Material Updates (update notifications)
     // ============================================
     match /materialUpdates/{updateId} {
-      // All authenticated users can read update notifications
-      allow read: if isSignedIn();
+      // Same audience gating as materials
+      allow read: if canSeeAudiences(resource.data);
       // Only trainers can create update notification records
       allow create: if isTrainer();
       // No update or delete needed

@@ -1,132 +1,110 @@
 'use client';
 
 /**
- * ProgressBar - Visual progress indicator for material completion
- * Shows X/Y pages viewed with percentage bar
+ * ProgressBar: brand progress indicator for material completion.
+ *
+ *   <ProgressBar viewedPages={4} totalPages={12} size="sm" showLabel />
+ *
+ * Props (backwards compatible): viewedPages, totalPages, size 'sm'|'md'|'lg',
+ * showLabel. Optional: unit ('pages' | 'slides'), label (override text).
  */
-export default function ProgressBar({ viewedPages = 0, totalPages = 0, size = 'md', showLabel = true }) {
-  const percentage = totalPages > 0 ? Math.round((viewedPages / totalPages) * 100) : 0;
-  const isCompleted = percentage >= 100;
-
-  const sizeClasses = {
-    sm: 'h-1',
-    md: 'h-2',
-    lg: 'h-3'
-  };
-
-  const heightClass = sizeClasses[size] || sizeClasses.md;
+export default function ProgressBar({
+  viewedPages = 0,
+  totalPages = 0,
+  size = 'md',
+  showLabel = true,
+  unit = 'pages',
+  label,
+}) {
+  const percentage = totalPages > 0 ? Math.min(100, Math.round((viewedPages / totalPages) * 100)) : 0;
+  const isCompleted = totalPages > 0 && percentage >= 100;
+  const sizeClass = { sm: 'rv-progress-sm', md: 'rv-progress-md', lg: 'rv-progress-lg' }[size] || 'rv-progress-md';
+  const text = label || (isCompleted ? 'Completed' : `${viewedPages} of ${totalPages} ${unit}`);
 
   return (
-    <div className="progress-bar-container">
+    <div className={`rv-progress ${sizeClass} ${isCompleted ? 'is-complete' : ''}`}>
       {showLabel && (
-        <div className="progress-bar-header">
-          <span className="progress-bar-label">
-            {isCompleted ? (
-              <>
-                <i className="material-icons" style={{ fontSize: '14px', color: 'var(--accent-pink)' }}>check_circle</i>
-                Completed
-              </>
-            ) : (
-              <>
-                {viewedPages} of {totalPages} pages viewed
-              </>
-            )}
+        <div className="rv-progress-head">
+          <span className="rv-progress-label">
+            {isCompleted && <i className="material-icons" aria-hidden="true">check_circle</i>}
+            {text}
           </span>
-          <span className="progress-bar-percentage">
-            {percentage}%
-          </span>
+          <span className="rv-progress-pct">{percentage}%</span>
         </div>
       )}
-      
-      <div className={`progress-bar-track ${heightClass}`}>
-        <div 
-          className={`progress-bar-fill ${isCompleted ? 'completed' : ''}`}
-          style={{ width: `${percentage}%` }}
-        />
+
+      <div
+        className="rv-progress-track"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percentage}
+        aria-label={showLabel ? undefined : `${percentage}% complete`}
+        aria-valuetext={`${percentage}% complete, ${viewedPages} of ${totalPages} ${unit}`}
+      >
+        <div className="rv-progress-fill" style={{ width: `${percentage}%` }} />
       </div>
 
       <style jsx>{`
-        .progress-bar-container {
+        .rv-progress {
           width: 100%;
         }
-
-        .progress-bar-header {
+        .rv-progress-head {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          gap: 8px;
           margin-bottom: 6px;
           font-size: 12px;
         }
-
-        .progress-bar-label {
-          color: var(--text-muted);
-          font-weight: 500;
-          display: flex;
+        .rv-progress-label {
+          display: inline-flex;
           align-items: center;
           gap: 4px;
-        }
-
-        .progress-bar-percentage {
-          color: var(--accent-pink);
-          font-weight: 700;
-          font-size: 13px;
-        }
-
-        .progress-bar-track {
-          width: 100%;
-          background: rgba(124, 58, 237, 0.1);
-          border-radius: 999px;
+          min-width: 0;
+          color: var(--text-muted);
+          font-weight: 600;
+          white-space: nowrap;
           overflow: hidden;
-          position: relative;
+          text-overflow: ellipsis;
         }
-
-        .progress-bar-fill {
-          height: 100%;
-          background: linear-gradient(90deg, var(--accent-pink) 0%, var(--accent-purple) 100%);
-          border-radius: 999px;
-          transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-          position: relative;
+        .rv-progress-label .material-icons {
+          font-size: 15px;
+          color: var(--color-success);
         }
-
-        .progress-bar-fill::after {
-          content: '';
-          position: absolute;
-          top: 0;
-          right: 0;
-          bottom: 0;
-          left: 0;
-          background: linear-gradient(
-            90deg,
-            transparent 0%,
-            rgba(255, 255, 255, 0.3) 50%,
-            transparent 100%
-          );
-          animation: shimmer 2s infinite;
+        .rv-progress-pct {
+          font-family: var(--font-heading);
+          font-size: 12px;
+          font-weight: 800;
+          color: var(--brand-purple);
+          font-variant-numeric: tabular-nums;
         }
-
-        .progress-bar-fill.completed {
-          background: linear-gradient(90deg, #10B981 0%, #059669 100%);
+        .is-complete .rv-progress-pct,
+        .is-complete .rv-progress-label {
+          color: var(--color-success);
         }
-
-        @keyframes shimmer {
-          0% {
-            transform: translateX(-100%);
-          }
-          100% {
-            transform: translateX(100%);
-          }
+        .rv-progress-track {
+          width: 100%;
+          height: 6px;
+          background: var(--bg-lavender);
+          border-radius: var(--radius-full);
+          overflow: hidden;
         }
-
-        .h-1 {
+        .rv-progress-sm .rv-progress-track {
           height: 4px;
         }
-
-        .h-2 {
-          height: 6px;
-        }
-
-        .h-3 {
+        .rv-progress-lg .rv-progress-track {
           height: 8px;
+        }
+        .rv-progress-fill {
+          height: 100%;
+          min-width: 0;
+          background: var(--gradient-brand-h);
+          border-radius: inherit;
+          transition: width 600ms var(--ease-out);
+        }
+        .is-complete .rv-progress-fill {
+          background: var(--color-success);
         }
       `}</style>
     </div>
